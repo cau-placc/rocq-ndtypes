@@ -1,23 +1,6 @@
-# Determinism Types for Functional Logic Programming
+NOTE: Formalization is now completely updated.
 
-NOTE: due to time constraints, the formalization is not yet fully updated
-to the paper. Should be updated by mid June. Differences are:
-- A different simplified Curry type system with only types Unit and Pairs.
-  Consequently, our expressions have different data constructors as well.
-- Compatibility is used differently, in the sense that we constructively
-  build compatible types and contexts, rather than using a
-  compatibility relation.
-
-For the reason that we still have to update the formalization,
-there are currently two small sections where this formalization
-is not yet completely machine-checked. We will address this in the near future.
-These points are the application of the substitution lemma on determinsm
-types in the preservation theorem for case and function application.
-At the moment, there is a consistency problem between the way compatibility
-is used in the preservation theorem statement and the way it is used in the
-substitution lemma.
-
-Other than these differences, you can check that this corresponds to the paper.
+You can check that this formalization corresponds to the paper.
 Just search in this document for the following important theorems and
 definitions:
 - "typeOf" corresponds to the simplified Curry type system
