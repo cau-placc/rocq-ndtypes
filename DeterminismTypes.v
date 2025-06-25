@@ -215,6 +215,10 @@ Section Types.
     - simpl. split; [apply IHt1 | apply IHt2].
   Qed.
 
+  Lemma compatible_ND : forall t,
+    compatible ND t.
+  Proof. reflexivity. Qed.
+
 End Types.
 
   (* some tactics to destruct
@@ -443,13 +447,8 @@ Section Subtyping.
     - simpl in H. simpl in H0.
       apply Bool.andb_true_iff in H. destruct H.
       apply Bool.andb_true_iff in H0. destruct H0.
-      erewrite less_specific_transitive.
-      erewrite more_specific_transitive.
-      reflexivity.
-      apply H.
-      apply H0.
-      apply H1.
-      apply H2.
+      erewrite less_specific_transitive; eauto.
+      erewrite more_specific_transitive; eauto.
   Qed.
 
   Lemma more_specific_ND : forall d, more_specific d ND = true.
@@ -1491,6 +1490,8 @@ End PreservationTTypes.
 
 Section Proofs.
 
+  Hint Resolve more_specific_ND compatible_ND : core.
+
   Lemma compatibility:
     forall e Rho Gamma t d,
     compatibleCtx Gamma Rho ->
@@ -1632,9 +1633,9 @@ Section Proofs.
       try eassumption. reflexivity.
       apply compatible_lub; try assumption.
       destruct x; inversion H0; reflexivity.
-      rewrite double_update_indep.
-      apply update_compatible. apply update_compatible.
-      assumption. assumption. reflexivity. assumption.
+      rewrite double_update_indep; trivial.
+      apply update_compatible; trivial.
+      apply update_compatible; trivial.
   Qed.
 
   Lemma hasDType_unbound : forall e Gamma d1 d2 n,
@@ -1667,21 +1668,19 @@ Section Proofs.
     - unfold freeVars in H0. fold freeVars in H0.
       apply anyIn_concat2 in H0. destruct H0 as [H0_1 H0_2].
       inversion H; subst; simpl in *.
-      + eapply IHe1 in H3. eapply IHe2 in H5.
-        eapply Rule_AppND. eassumption. eassumption.
-        eassumption. eassumption.
-      + eapply IHe1 in H2. eapply IHe2 in H4.
-        eapply Rule_AppFun. eassumption. eassumption.
-        reflexivity. eassumption. eassumption.
+      + eapply IHe1 in H3; eauto. eapply IHe2 in H5; eauto.
+        eapply Rule_AppND; eauto.
+      + eapply IHe1 in H2; eauto. eapply IHe2 in H4; eauto.
+        eapply Rule_AppFun; eauto.
     - inversion H. subst. simpl in *.
       destruct (n0 =? n) eqn:Heq.
       + rewrite Nat.eqb_eq in Heq. subst.
         eapply Rule_Abs. assumption.
         rewrite double_update. eassumption.
       + apply Nat.eqb_neq in Heq. eapply IHe in H7.
-        eapply Rule_Abs. assumption. rewrite double_update_indep.
-        apply H7. assumption. apply anyIn_removeb in H0. assumption.
-        symmetry. assumption.
+        eapply Rule_Abs. assumption.
+        rewrite double_update_indep; eassumption.
+        apply anyIn_removeb in H0; auto.
     - inversion H. subst. simpl in *.
       apply anyIn_concat2 in H0. destruct H0 as [HH1 HH2].
       eapply IHe1 in H4. eapply IHe2 in H6.
@@ -1715,28 +1714,20 @@ Section Proofs.
         assumption.
       + apply Nat.eqb_eq in HeqN2.
         apply Nat.eqb_neq in HeqN1. subst.
-        rewrite double_update_indep.
-        rewrite double_update.
+        rewrite double_update_indep; eauto.
+        rewrite double_update; eauto.
         subst Gamma'. subst Gamma''.
-        rewrite double_update_indep in H12.
-        assumption. symmetry. assumption.
-        symmetry. assumption.
+        rewrite double_update_indep in H12; eauto.
       + apply Nat.eqb_neq in HeqN2.
         apply Nat.eqb_eq in HeqN1. subst.
-        rewrite double_update.
-        subst Gamma'. subst Gamma''.
-        assumption.
+        rewrite double_update; eauto.
       + apply Nat.eqb_neq in HeqN2.
         apply Nat.eqb_neq in HeqN1. subst.
-        rewrite (double_update_indep _ n _ n1).
-        rewrite (double_update_indep _ n _ n2).
+        rewrite (double_update_indep _ n _ n1); auto.
+        rewrite (double_update_indep _ n _ n2); auto.
         subst Gamma'. subst Gamma''.
-        apply anyIn_removeb in HH4.
-        apply anyIn_removeb in HH4.
-        apply IHe3; assumption.
-        symmetry. assumption.
-        symmetry. assumption.
-        assumption. assumption.
+        apply anyIn_removeb in HH4; auto.
+        apply anyIn_removeb in HH4; auto.
   Qed.
 
   (* Lemma subst_lemma:
@@ -1782,17 +1773,12 @@ Section Proofs.
       apply anyIn_cons in H. destruct H as [HH1 HH2].
       apply anyIn_concat1 in HH1. destruct HH1 as [HH3 HH4].
       apply well_typed_subterms in H0. destruct H0 as [H0_1 H0_2].
-      edestruct IHe1_1 in H9. apply anyIn_cons.
-      split; eassumption. eassumption.
-      eassumption. eassumption. eassumption.
-      eassumption. apply H5. apply H6.
-      edestruct IHe1_2 in H11. apply anyIn_cons.
-      split; eassumption. eassumption.
-      eassumption. eassumption. eassumption.
-      eassumption. apply H5. apply H6.
+      edestruct IHe1_1 in H9; try eassumption.
+      apply anyIn_cons. split; eassumption.
+      edestruct IHe1_2 in H11; try eassumption.
+      apply anyIn_cons. split; eassumption.
       destruct H, H0. eexists. split.
-      shelve. eapply Rule_Cons. eassumption. eassumption.
-      reflexivity. Unshelve.
+      shelve. eapply Rule_Cons; eauto. Unshelve.
       destruct x, x0, d0, d4; try inversion H;
       try inversion H0; try rewrite H12; try reflexivity.
     - apply anyIn_cons in H. destruct H as [HH1 HH2].
@@ -1847,31 +1833,27 @@ Section Proofs.
       + apply Nat.eqb_neq in Heq. subst Gamma'.
         rewrite double_update_indep in H0; try assumption.
         rewrite double_update_indep in H13; try assumption.
-        edestruct IHe1 in H13.
+        edestruct IHe1 in H13; try eassumption.
         apply anyIn_cons. split; eassumption.
-        eassumption. erewrite typeOf_unbound. eassumption. eassumption. eassumption. shelve.
-        eassumption. apply H13. eassumption.
-        apply hasDType_unbound. apply H6. assumption.
+        erewrite typeOf_unbound; eassumption.
+        apply update_compatible; assumption.
+        apply hasDType_unbound; assumption.
         destruct H. eexists. split. shelve. simpl.
         apply Nat.eqb_neq in Heq. rewrite Nat.eqb_sym in Heq.
-        rewrite Heq. eapply Rule_Abs. apply H12. apply H7.
-        Unshelve. apply update_compatible; assumption.
+        rewrite Heq. eapply Rule_Abs; eassumption. Unshelve.
         simpl. rewrite less_specific_refl.
         rewrite H. reflexivity.
     - inversion H2. subst.
       apply well_typed_subterms in H0. destruct H0 as [H0_1 H0_2].
       apply anyIn_cons in H. destruct H as [HH1 HH2].
       apply anyIn_concat1 in HH1. destruct HH1 as [HH3 HH4].
-      edestruct IHe1_1 in H10.
+      edestruct IHe1_1 in H10; try eassumption.
       apply anyIn_cons. split; eassumption.
-      eassumption. eassumption. eassumption. eassumption. eassumption. eassumption.
-      eassumption. edestruct IHe1_2 in H10.
+      edestruct IHe1_2 in H10; try eassumption.
       apply anyIn_cons. split; eassumption.
-      eassumption. eassumption. eassumption.
-      eassumption. eassumption. eassumption.
-      eassumption. destruct H, H0.
-      exists ND. split. apply more_specific_ND. simpl.
-      eapply Rule_Choice; eassumption.
+      destruct H, H0.
+      exists ND. split. apply more_specific_ND.
+      simpl. eapply Rule_Choice; eassumption.
     - inversion H2. subst.
       remember H0 as HC. clear HeqHC.
       apply well_typed_subterms in H0.
@@ -1879,32 +1861,22 @@ Section Proofs.
       apply anyIn_cons in H. destruct H as [HH1 HH2].
       apply anyIn_subterm in HH1.
       destruct HH1 as [HH3 [HH4 HH5]].
-      edestruct IHe1_1 in H0_1.
+      edestruct IHe1_1 in H0_1; try eassumption.
       apply anyIn_cons. split; eassumption.
-      eassumption. eassumption. eassumption.
-      eassumption. eassumption. eassumption.
-      eassumption. destruct H.
-      edestruct IHe1_2 in H0_2.
+      edestruct IHe1_2 in H0_2; try eassumption.
       apply anyIn_cons. split; eassumption.
-      eassumption. eassumption. eassumption.
-      eassumption. eassumption. eassumption.
-      eassumption. destruct H7.
-      edestruct IHe1_3 in H0_3.
+      edestruct IHe1_3 in H0_3; try eassumption.
       apply anyIn_cons. split; eassumption.
-      eassumption. eassumption. eassumption.
-      eassumption. eassumption. eassumption.
-      eassumption. destruct H9.
+      destruct H, H0, H7.
       exists (lub x x0 x1). split.
       * apply more_specific_lub; try assumption.
         destruct_typeOf_chain HC.
         remember Heq1 as Heq1C. clear HeqHeq1C.
         eapply compatibility in Heq1. shelve.
         shelve. apply H11. Unshelve.
-        -- eapply subst_preservation in H1.
-           eapply compatibility in H1. apply H1.
-           eassumption. eassumption.
+        -- eapply subst_preservation in H1; try eassumption.
+           eapply compatibility in H1; eassumption.
            apply anyIn_cons. split; assumption.
-           apply Heq1C.
         -- apply update_compatible; assumption.
       * simpl. apply Rule_CaseBool; assumption.
     - inversion H2. subst.
@@ -1927,9 +1899,8 @@ Section Proofs.
       apply anyIn_cons. split; try eassumption.
       rewrite Heq2. reflexivity. eassumption. eassumption.
       eassumption. eassumption. eassumption. eassumption.
-      destruct H8.
-      destruct (n0 =? n1) eqn:HeqN1,
-               (n0 =? n2) eqn:HeqN2.
+      destruct H8, (n0 =? n1) eqn:HeqN1,
+                   (n0 =? n2) eqn:HeqN2.
       + rewrite Nat.eqb_eq in HeqN1. subst n1.
         rewrite Nat.eqb_eq in HeqN2. subst n2.
         contradiction.
@@ -1981,46 +1952,33 @@ Section Proofs.
             rewrite double_update_indep; try eassumption.
       + rewrite Nat.eqb_neq in HeqN1.
         rewrite Nat.eqb_neq in HeqN2.
-        rewrite (double_update_indep _ n0 _ n2) in Heq3.
-        rewrite (double_update_indep _ n0 _ n1) in Heq3.
+        rewrite (double_update_indep _ n0 _ n2 _ HeqN2) in Heq3.
+        rewrite (double_update_indep _ n0 _ n1 _ HeqN1) in Heq3.
         subst Gamma'. subst Gamma''. subst Gamma'0.
-        rewrite (double_update_indep _ n0 _ n1) in H18.
-        rewrite (double_update_indep _ n0 _ n2) in H18.
+        rewrite (double_update_indep _ n0 _ n1 _ HeqN1) in H18.
+        rewrite (double_update_indep _ n0 _ n2 _ HeqN2) in H18.
         edestruct IHe1_3 in H0_3.
         apply anyIn_cons. split; try eassumption.
         unfold well_typed. rewrite Heq3.
-        reflexivity. erewrite typeOf_unbound.
-        erewrite typeOf_unbound.
+        reflexivity. erewrite typeOf_unbound; eauto.
+        erewrite typeOf_unbound; eauto.
+        erewrite typeOf_unbound; eauto.
+        erewrite double_update_indep; eauto.
+        apply update_compatible; try eassumption.
+        apply update_compatible; try eassumption.
         eassumption. eassumption. eassumption.
-        erewrite typeOf_unbound.
-        eassumption. eassumption. eassumption.
-        eassumption. shelve.
-        eassumption. eassumption.
-        eassumption.
-        apply hasDType_unbound. apply hasDType_unbound.
-        assumption. assumption. eassumption.
+        apply hasDType_unbound; eauto.
+        apply hasDType_unbound; eauto.
         destruct H10. exists (lub x x0 x1). split.
         * apply more_specific_lub; try assumption.
           remember Heq1 as Heq1C. clear HeqHeq1C.
-          eapply compatibility in Heq1. shelve.
-          shelve. apply H12. Unshelve.
-          erewrite double_update_indep.
-          apply update_compatible; try assumption.
-          apply update_compatible; assumption.
-          assumption. shelve.
-          apply update_compatible; assumption.
-          Unshelve. eapply compatibility in H0. shelve.
-          eassumption.
-          eapply subst_preservation.
+          eapply compatibility in Heq1; eauto.
+          eapply compatibility with (t:=TList _) in H0; eauto.
+          destruct x; try reflexivity; try inversion H0.
+          eapply subst_preservation; eauto.
           apply anyIn_cons. split; assumption.
-          apply Heq1C. apply H1.
-          Unshelve. destruct x;
-          try reflexivity; try inversion H0.
+          apply update_compatible; eassumption.
         * simpl. eapply Rule_CaseList; eassumption.
-        * assumption.
-        * assumption.
-        * assumption.
-        * assumption.
   Qed.
 
   (* Lemma subst_lemma2:
@@ -2082,19 +2040,19 @@ Section Proofs.
         apply H16. apply H1. apply H15.
       - unfold well_typed.
         erewrite subst_preservation. reflexivity.
-        apply anyIn_cons. split. apply H0. apply H16.
+        apply anyIn_cons. split; assumption.
         rewrite double_update_indep.
         rewrite Heq1. reflexivity. assumption.
-        erewrite typeOf_unbound. assumption. eassumption. assumption.
+        erewrite typeOf_unbound; eassumption.
       - assumption.
       - apply H6.
       - apply H7.
       - apply H19.
       - eassumption.
       - eassumption.
-      - destruct H20. exists x0.
-        split. eapply more_specific_transitive. apply H20.
-        apply H18. apply H21.
+      - destruct H20. exists x0. split.
+        eapply more_specific_transitive; eassumption.
+        apply H21.
   Qed.
 
   (* Theorem preservation:
@@ -2471,10 +2429,10 @@ Section Proofs.
       eapply (step_preservation _ _ _ _ H5) in H2.
       apply (preservation e1 e2 Rho Gamma t d) in H; try assumption.
       destruct H, H, H5, H8.
-      destruct (IHmulti_step_rel Rho Gamma x).
-      assumption. assumption. apply H5. apply H8. destruct H9, H10.
-      exists x0. split. eapply more_specific_transitive.
-      eassumption. eassumption. split; assumption.
+      destruct (IHmulti_step_rel Rho Gamma x); eauto.
+      destruct H9, H10. exists x0. split.
+      eapply more_specific_transitive; eauto.
+      split; assumption.
   Qed.
 
   (* Theorem soundness:
