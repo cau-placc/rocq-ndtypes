@@ -13,7 +13,7 @@ definitions:
 - "DType" is the type of deterministic types
 - "TType" is the type of Curry types
 - "more_specific" is the subtyping relation
-- "Gamma '|-' e ':::' delta" is the Deterministic typing relation
+- "Gamma '|-' e ':?' delta" is the Deterministic typing relation
 - "step" (or "==>") is the small-step semantics
 - "subst" is the substitution function
 - "notOr" is the definition for a deterministic result
@@ -106,12 +106,10 @@ Section Types.
     eqType t1 t2 = true <-> t1 = t2.
   Proof.
     intros. split.
-    - intros. generalize dependent t2. induction t1; intros.
-      + destruct t2; try discriminate. reflexivity.
-      + destruct t2; try discriminate. simpl in H.
-        apply IHt1 in H. subst. reflexivity.
-      + destruct t2; try discriminate. simpl in H.
-        apply Bool.andb_true_iff in H. destruct H.
+    - intros. generalize dependent t2. induction t1;
+      intros; destruct t2; eauto with *.
+      + apply IHt1 in H. subst. reflexivity.
+      + simpl in H. apply Bool.andb_true_iff in H. destruct H.
         apply IHt1_1 in H. apply IHt1_2 in H0.
         subst. reflexivity.
     - intros. subst. apply eqType_refl.
@@ -185,15 +183,15 @@ Section Types.
     end.
 
   Inductive DType : Type :=
-    | D : DType
-    | ND : DType
+    | Det : DType
+    | Any : DType
     | Arrow : DType -> DType -> DType.
 
   Fixpoint compatible (d : DType) (t : TType) : Prop :=
     match d, t with
-    | D, TBool => True
-    | D, TList _ => True
-    | ND, _ => True
+    | Det, TBool => True
+    | Det, TList _ => True
+    | Any, _ => True
     | Arrow d1 d2, TArrow t1 t2 =>
         compatible d1 t1 /\ compatible d2 t2
     | _, _ => False
@@ -201,8 +199,8 @@ Section Types.
 
   Fixpoint mkCompatible (t : TType) : DType :=
     match t with
-    | TBool => D
-    | TList _ => D
+    | TBool => Det
+    | TList _ => Det
     | TArrow t1 t2 => Arrow (mkCompatible t1) (mkCompatible t2)
     end.
 
@@ -216,7 +214,7 @@ Section Types.
   Qed.
 
   Lemma compatible_ND : forall t,
-    compatible ND t.
+    compatible Any t.
   Proof. reflexivity. Qed.
 
 End Types.
@@ -344,50 +342,49 @@ Section Subtyping.
 
   Fixpoint more_specific (d1 d2 : DType) : bool :=
     match d1, d2 with
-    | _, ND => true
-    | D, D => true
+    | _, Any => true
+    | Det, Det => true
     | Arrow d1 d2, Arrow d1' d2' =>
         andb (less_specific d1 d1') (more_specific d2 d2')
     | _, _ => false
     end
     with less_specific (d1 d2 : DType) : bool :=
       match d1, d2 with
-      | ND, _ => true
-      | D, D => true
+      | Any, _ => true
+      | Det, Det => true
       | Arrow d1 d2, Arrow d1' d2' =>
           andb (more_specific d1 d1') (less_specific d2 d2')
       | _, _ => false
       end.
 
   Definition decide (d1 d3 d2 : DType) : DType :=
-    if more_specific d3 d1 then d2 else ND.
+    if more_specific d3 d1 then d2 else Any.
 
   Example more_specific_ex1 :
-    more_specific (Arrow ND D) (Arrow D D) = true.
+    more_specific (Arrow Any Det) (Arrow Det Det) = true.
   Proof. trivial. Qed.
 
   Example more_specific_ex2 :
-    more_specific (Arrow D D) (Arrow ND D) = false.
+    more_specific (Arrow Det Det) (Arrow Any Det) = false.
   Proof. trivial. Qed.
 
   Example more_specific_ex3 :
-    more_specific (Arrow (Arrow D D) D) (Arrow (Arrow ND D) D) = true.
+    more_specific (Arrow (Arrow Det Det) Det) (Arrow (Arrow Any Det) Det) = true.
   Proof. trivial. Qed.
 
-  (* map :# (D -> D) -> (D -> D)
-  map :# (ND -> D) -> (ND -> ND)  -- spine *)
+  (* map :# (Det -> Det) -> (Det -> Det)
+  map :# (Any -> Det) -> (Any -> Any)  -- spine *)
   Example more_specific_ex4 :
-    more_specific (Arrow (Arrow D D) (Arrow D D))
-                  (Arrow (Arrow ND D) (Arrow ND ND)) = false /\
-    less_specific (Arrow (Arrow D D) (Arrow D D))
-                  (Arrow (Arrow ND D) (Arrow ND ND)) = false.
-  Proof. split; trivial. Qed.
+    more_specific (Arrow (Arrow Det Det) (Arrow Det Det))
+                  (Arrow (Arrow Any Det) (Arrow Any Any)) = false /\
+    less_specific (Arrow (Arrow Det Det) (Arrow Det Det))
+                  (Arrow (Arrow Any Det) (Arrow Any Any)) = false.
+  Proof. intuition. Qed.
 
   Lemma specificity_not_inverses : exists d1 d2,
     more_specific d1 d2 = false /\ less_specific d1 d2 = false.
   Proof.
-    exists (Arrow D D), (Arrow ND ND).
-    split; reflexivity.
+    exists (Arrow Det Det), (Arrow Any Any). intuition.
   Qed.
 
   Lemma more_specific_refl : forall d, more_specific d d = true
@@ -432,14 +429,7 @@ Section Subtyping.
     - simpl in H. simpl in H0.
       apply Bool.andb_true_iff in H. destruct H.
       apply Bool.andb_true_iff in H0. destruct H0.
-      erewrite less_specific_transitive.
-      erewrite more_specific_transitive.
-      reflexivity.
-      apply H1.
-      apply H2.
-      apply H.
-      apply H0.
-
+      erewrite less_specific_transitive; eauto.
     --
     intros. induction d1, d2, d3; simpl; trivial.
     - inversion H0.
@@ -447,17 +437,16 @@ Section Subtyping.
     - simpl in H. simpl in H0.
       apply Bool.andb_true_iff in H. destruct H.
       apply Bool.andb_true_iff in H0. destruct H0.
-      erewrite less_specific_transitive; eauto.
       erewrite more_specific_transitive; eauto.
   Qed.
 
-  Lemma more_specific_ND : forall d, more_specific d ND = true.
+  Lemma more_specific_ND : forall d, more_specific d Any = true.
   Proof.
     - induction d; simpl; trivial.
   Qed.
 
   Lemma more_specific_D : forall d,
-    more_specific d D = true -> d = D.
+    more_specific d Det = true -> d = Det.
   Proof.
     - induction d; intros; inversion H; simpl; trivial.
   Qed.
@@ -469,7 +458,7 @@ Section LeastUpperBound.
   Definition lub2 (d1 d2 : DType) : DType :=
     if more_specific d1 d2 then d2
     else if more_specific d2 d1 then d1
-    else ND.
+    else Any.
 
   Definition lub (d1 d2 d3 : DType) : DType :=
     lub2 (lub2 d1 d2) d3.
@@ -598,60 +587,60 @@ End LeastUpperBound.
    connecting the operational behavior with static determinism properties. *)
 Section DetTyping.
 
-  Reserved Notation "Gamma '|-' e ':::' delta" (at level 40).
+  Reserved Notation "Gamma '|-' e ':?' delta" (at level 40).
   Inductive hasDType : context -> Exp -> DType -> Prop :=
     | Rule_Var : forall Gamma x d,
           (Gamma x) = d ->
-          Gamma |- Var x ::: d
+          Gamma |- Var x :? d
     | Rule_BTrue : forall Gamma,
-          Gamma |- BTrue ::: D
+          Gamma |- BTrue :? Det
     | Rule_BFalse : forall Gamma,
-          Gamma |- BFalse ::: D
+          Gamma |- BFalse :? Det
     | Rule_Nil : forall Gamma t,
-          Gamma |- Nil t ::: D
+          Gamma |- Nil t :? Det
     | Rule_Cons : forall Gamma e1 e2 d1 d2 d3,
-          Gamma |- e1 ::: d1 ->
-          Gamma |- e2 ::: d2 ->
+          Gamma |- e1 :? d1 ->
+          Gamma |- e2 :? d2 ->
           d3 = match d1, d2 with
-              | D, D => D
-              | _, _ => ND
+              | Det, Det => Det
+              | _, _ => Any
               end ->
-          Gamma |- Cons e1 e2 ::: d3
-    | Rule_AppND : forall Gamma e1 e2 d,
-          Gamma |- e1 ::: ND ->
-          Gamma |- e2 ::: d ->
-          Gamma |- App e1 e2 ::: ND
+          Gamma |- Cons e1 e2 :? d3
+    | Rule_AppAny : forall Gamma e1 e2 d,
+          Gamma |- e1 :? Any ->
+          Gamma |- e2 :? d ->
+          Gamma |- App e1 e2 :? Any
     | Rule_AppFun : forall Gamma e1 e2 d1 d2 d3 d4,
-          Gamma |- e1 ::: Arrow d1 d2 ->
-          Gamma |- e2 ::: d3 ->
+          Gamma |- e1 :? Arrow d1 d2 ->
+          Gamma |- e2 :? d3 ->
           d4 = decide d1 d3 d2 ->
-          Gamma |- App e1 e2 ::: d4
+          Gamma |- App e1 e2 :? d4
     | Rule_Abs : forall Gamma x e d1 d2 t1,
           compatible d1 t1 ->
           let Gamma' := update Nat.eqb Gamma x d1 in
-          Gamma' |- e ::: d2 ->
-          Gamma |- Abs x t1 e ::: Arrow d1 d2
+          Gamma' |- e :? d2 ->
+          Gamma |- Abs x t1 e :? Arrow d1 d2
     | Rule_Choice : forall Gamma e1 e2 d1 d2,
-          Gamma |- e1 ::: d1 ->
-          Gamma |- e2 ::: d2 ->
-          Gamma |- Or e1 e2 ::: ND
+          Gamma |- e1 :? d1 ->
+          Gamma |- e2 :? d2 ->
+          Gamma |- Or e1 e2 :? Any
     | Rule_CaseBool : forall Gamma e1 e2 e3 d1 d2 d3,
-          Gamma |- e1 ::: d1 ->
-          Gamma |- e2 ::: d2 ->
-          Gamma |- e3 ::: d3 ->
-          Gamma |- CaseB e1 e2 e3 ::: lub d1 d2 d3
+          Gamma |- e1 :? d1 ->
+          Gamma |- e2 :? d2 ->
+          Gamma |- e3 :? d3 ->
+          Gamma |- CaseB e1 e2 e3 :? lub d1 d2 d3
     | Rule_CaseList :
         forall Gamma e1 e2 e3 n1 n2 d1 t1 d2 d_1 d_2 d_3 H,
-          Gamma |- e1 ::: d_1 ->
+          Gamma |- e1 :? d_1 ->
           compatible d1 t1 ->
           compatible d2 (TList t1) ->
-          Gamma |- e2 ::: d_2 ->
+          Gamma |- e2 :? d_2 ->
           let Gamma'  := update Nat.eqb Gamma  n1 d1 in
           let Gamma'' := update Nat.eqb Gamma' n2 d2 in
-          Gamma'' |- e3 ::: d_3 ->
+          Gamma'' |- e3 :? d_3 ->
           let p := Pat n1 t1 n2 H in
-          Gamma |- CaseL e1 e2 p e3 ::: lub d_1 d_2 d_3
-    where "Gamma '|-' e ':::' delta" := (hasDType Gamma e delta).
+          Gamma |- CaseL e1 e2 p e3 :? lub d_1 d_2 d_3
+    where "Gamma '|-' e ':?' delta" := (hasDType Gamma e delta).
 
 End DetTyping.
 
@@ -795,7 +784,7 @@ End SmallStepSemantics.
 
 
 (* redeclare notation globally *)
-Notation "Gamma '|-' e ':::' delta" := (hasDType Gamma e delta)
+Notation "Gamma '|-' e ':?' delta" := (hasDType Gamma e delta)
   (at level 40).
 
 Notation "e ==> e'" := (step_rel e e') (at level 40).
@@ -810,20 +799,20 @@ Section Examples.
                Rule_Cons Rule_Choice Rule_CaseBool
                Rule_CaseList : core.
 
-  Definition Gamma1 := update Nat.eqb (fun _ => ND) 1 D.
+  Definition Gamma1 := update Nat.eqb (fun _ => Any) 1 Det.
 
-  Example exVar : Gamma1 |- Var 1 ::: D.
+  Example exVar : Gamma1 |- Var 1 :? Det.
   Proof. eauto. Qed.
 
-  Example eFreeVar : Gamma1 |- Var 42 ::: ND.
+  Example eFreeVar : Gamma1 |- Var 42 :? Any.
   Proof. eauto. Qed.
 
-  Example exCons : Gamma1 |- Nil TBool ::: D.
+  Example exCons : Gamma1 |- Nil TBool :? Det.
   Proof. eauto. Qed.
 
-  Example exApp : Gamma1 |- App (Abs 2 TBool (Var 2)) (Var 1) ::: D.
+  Example exApp : Gamma1 |- App (Abs 2 TBool (Var 2)) (Var 1) :? Det.
   Proof.
-    eapply Rule_AppFun with (d1 := D) (d2 := D) (d3 := D);
+    eapply Rule_AppFun with (d1 := Det) (d2 := Det) (d3 := Det);
     try apply Rule_Abs; eauto; reflexivity.
   Qed.
 
@@ -833,41 +822,41 @@ Section Examples.
     reflexivity. apply Multi_Step_Refl.
   Qed.
 
-  Example exAbs : Gamma1 |- Abs 2 TBool (Var 1) ::: Arrow D D.
+  Example exAbs : Gamma1 |- Abs 2 TBool (Var 1) :? Arrow Det Det.
   Proof.
     apply Rule_Abs; eauto; reflexivity.
   Qed.
 
-  Definition Gamma2 := update Nat.eqb (fun _ => ND) 1 (Arrow (Arrow D D) (Arrow D D)).
+  Definition Gamma2 := update Nat.eqb (fun _ => Any) 1 (Arrow (Arrow Det Det) (Arrow Det Det)).
 
-  Example exPoly : Gamma2 |- App (Var 1) (Abs 2 TBool (Var 2)) ::: Arrow D D.
+  Example exPoly : Gamma2 |- App (Var 1) (Abs 2 TBool (Var 2)) :? Arrow Det Det.
   Proof.
-    eapply Rule_AppFun with (d1 := Arrow D D)
-                            (d2 := Arrow D D)
-                            (d3 := Arrow D D);
+    eapply Rule_AppFun with (d1 := Arrow Det Det)
+                            (d2 := Arrow Det Det)
+                            (d3 := Arrow Det Det);
     try apply Rule_Abs; eauto. reflexivity.
   Qed.
 
-  Example exChoice : Gamma1 |- Or (Var 1) (Var 1) ::: ND.
+  Example exChoice : Gamma1 |- Or (Var 1) (Var 1) :? Any.
   Proof. eauto. Qed.
 
   (*
   1 = allValues :? Any -> Det
   2 = \x -> id x ? not x :? Any -> Any
-  result must not be of type D
+  result must not be of type Det
   *)
   Definition RhoAV' := update Nat.eqb (fun _ => TBool) 1 (TArrow TBool TBool).
   Definition RhoAV  := update Nat.eqb RhoAV' 2 (TArrow TBool TBool).
-  Definition GammaAV := update Nat.eqb (update Nat.eqb (fun _ => ND) 1 ND) 2 (mkCompatible (RhoAV 2)).
-  (* GammaAV = {1 -> D, 2 -> Arrow TBool TBool} *)
+  Definition GammaAV := update Nat.eqb (update Nat.eqb (fun _ => Any) 1 Any) 2 (mkCompatible (RhoAV 2)).
+  (* GammaAV = {1 -> Det, 2 -> Arrow TBool TBool} *)
 
-  (* The following example requires the AppND rule to type it correctly. *)
-  Example exAllValues : GammaAV |- App (Var 1) (Var 2) ::: ND.
+  (* The following example requires the AppAny rule to type it correctly. *)
+  Example exAllValues : GammaAV |- App (Var 1) (Var 2) :? Any.
   Proof.
-      eapply Rule_AppND; apply Rule_Var; reflexivity.
+      eapply Rule_AppAny; apply Rule_Var; reflexivity.
   Qed.
 
-  Example exAllValuesNotD : not (GammaAV |- App (Var 1) (Var 2) ::: D).
+  Example exAllValuesNotD : not (GammaAV |- App (Var 1) (Var 2) :? Det).
   Proof.
       unfold not. intros.
       inversion H. inversion H2. inversion H4. subst.
@@ -877,7 +866,7 @@ Section Examples.
   Qed.
 
   (*
-  The AppND rule is required to type the following example.
+  The AppAny rule is required to type the following example.
   1 -> not :? Det -> Det
   2 -> id :? Det -> Det
   (not ? id) :? Any
@@ -886,18 +875,18 @@ Section Examples.
   Definition RhoC' := update Nat.eqb (fun _ => TBool) 1 (TArrow TBool TBool).
   Definition RhoC  := update Nat.eqb RhoC' 2 (TArrow TBool TBool).
   Definition GammaC := mkCompatibleCtx RhoC.
-  Example exChoice2 : GammaC |- App (Or (Var 1) (Var 2)) BFalse ::: ND.
-  Proof. eapply Rule_AppND; eauto. Qed.
+  Example exChoice2 : GammaC |- App (Or (Var 1) (Var 2)) BFalse :? Any.
+  Proof. eapply Rule_AppAny; eauto. Qed.
 
-  Lemma exChoice2_must_use_AppND :
+  Lemma exChoice2_must_use_AppAny :
   forall b d,
-    GammaC |- App (Or (Var 1) (Var 2)) b ::: d ->
-    d = ND /\
+    GammaC |- App (Or (Var 1) (Var 2)) b :? d ->
+    d = Any /\
     (forall d1 d2,
-      ~ (GammaC |- Or (Var 1) (Var 2) ::: d1 /\ GammaC |- b ::: d2 /\
+      ~ (GammaC |- Or (Var 1) (Var 2) :? d1 /\ GammaC |- b :? d2 /\
          exists d3 d4 d5,
-           GammaC |- Or (Var 1) (Var 2) ::: Arrow d3 d4 /\
-           GammaC |- b ::: d5 /\
+           GammaC |- Or (Var 1) (Var 2) :? Arrow d3 d4 /\
+           GammaC |- b :? d5 /\
            d = decide d3 d5 d4)).
   Proof.
     intros b d H.
@@ -1113,14 +1102,12 @@ Section PreservationTTypesHelper.
           rewrite eqTypeS_refl. reflexivity.
           assumption.
         * apply Nat.eqb_neq in Heq6. apply Nat.eqb_neq in Heq7.
-          rewrite (double_update_indep _ n1 _ n2).
-          rewrite (double_update_indep _ n1 _ n0).
-          erewrite IHe3. rewrite Heq3.
+          rewrite (double_update_indep _ n1 _ n2); eauto.
+          rewrite (double_update_indep _ n1 _ n0); eauto.
+          erewrite IHe3; eauto. rewrite Heq3.
           rewrite eqTypeS_refl. reflexivity.
-          eassumption. apply anyIn_removeb in H4.
-          apply anyIn_removeb in H4. assumption.
-          symmetry. assumption. symmetry. assumption.
-          assumption. assumption.
+          apply anyIn_removeb in H4; eauto.
+          apply anyIn_removeb in H4; eauto.
   Qed.
 
   Lemma anyIn_subst :
@@ -1130,71 +1117,44 @@ Section PreservationTTypesHelper.
     anyIn (freeVars e2) (boundVars e3) = false ->
     anyIn (freeVars e2) (boundVars (subst n3 e3 e1)) = false.
   Proof.
-    induction e1; intros e2 e3 n3 H1 H2 H3.
-    - simpl. destruct (n =? n3) eqn:Heq.
+    induction e1; intros e2 e3 n3 H1 H2 H3; simpl; auto.
+    - destruct (n =? n3) eqn:Heq.
       * rewrite Nat.eqb_eq in Heq. subst n3.
         simpl in H1. apply H3.
       * apply H1.
-    - simpl. apply H1.
-    - simpl. apply H1.
-    - simpl. apply H1.
     - simpl. apply anyIn_subterm in H1. destruct H1.
-      apply anyIn_concat1. split.
-      apply IHe1_1; assumption.
-      apply IHe1_2; assumption.
+      apply anyIn_concat1; intuition.
     - simpl. apply anyIn_subterm in H1. destruct H1.
-      apply anyIn_concat1. split.
-      apply IHe1_1; assumption.
-      apply IHe1_2; assumption.
+      apply anyIn_concat1; intuition.
     - simpl. apply anyIn_subterm in H1. destruct H1.
       destruct (n =? n3) eqn:Heq.
       * apply Nat.eqb_eq in Heq. subst n3.
-        simpl in *. apply anyIn_cons.
-        split; assumption.
-      * simpl in *. apply anyIn_cons. split;
-        try eapply IHe1; try eassumption.
+        simpl in *. apply anyIn_cons; intuition.
+      * simpl in *. apply anyIn_cons; intuition.
     - simpl. apply anyIn_subterm in H1. destruct H1.
-      apply anyIn_concat1. split.
-      apply IHe1_1; assumption.
-      apply IHe1_2; assumption.
+      apply anyIn_concat1; intuition.
     - simpl. apply anyIn_subterm in H1. destruct H1.
-      destruct H0.
-      apply anyIn_concat1. split.
-      apply IHe1_1; assumption.
-      apply anyIn_concat1. split.
-      apply IHe1_2; assumption.
-      apply IHe1_3; assumption.
-    - destruct p. apply anyIn_subterm in H1. destruct H1.
-      destruct H0. simpl.
+      apply anyIn_concat1; intuition.
+      apply anyIn_concat1; intuition.
+    - destruct p. apply anyIn_subterm in H1.
+      destruct H1, H0. simpl.
       destruct (n3 =? n1) eqn:Heq1,
                 (n3 =? n2) eqn:Heq2; simpl in *.
       + apply Nat.eqb_eq in Heq1. apply Nat.eqb_eq in Heq2. subst.
-        apply anyIn_concat1. split.
-        apply IHe1_1; assumption.
-        apply anyIn_concat1. split.
-        apply IHe1_2; assumption.
-        assumption.
+        apply anyIn_concat1; intuition.
       + apply Nat.eqb_eq in Heq1. apply Nat.eqb_neq in Heq2. subst.
-        apply anyIn_concat1. split.
-        apply IHe1_1; assumption.
-        apply anyIn_concat1. split.
-        apply IHe1_2; assumption.
-        assumption.
+        apply anyIn_concat1; intuition.
+        apply anyIn_concat1; intuition.
       + apply Nat.eqb_neq in Heq1. apply Nat.eqb_eq in Heq2. subst.
-        apply anyIn_concat1. split.
-        apply IHe1_1; assumption.
-        apply anyIn_concat1. split.
-        apply IHe1_2; assumption.
-        assumption.
+        apply anyIn_concat1; intuition.
+        apply anyIn_concat1; intuition.
       + apply Nat.eqb_neq in Heq1. apply Nat.eqb_neq in Heq2.
-        apply anyIn_concat1. split.
-        eapply IHe1_1; assumption.
-        apply anyIn_concat1. split.
-        eapply IHe1_2; assumption.
+        apply anyIn_concat1; intuition.
+        apply anyIn_concat1; intuition.
         apply anyIn_cons in H1. destruct H1.
         apply anyIn_cons in H1. destruct H1.
-        apply anyIn_cons. split. apply anyIn_cons.
-        split. eapply IHe1_3; try eassumption. assumption. assumption.
+        apply anyIn_cons; intuition.
+        apply anyIn_cons; intuition.
   Qed.
 
 End PreservationTTypesHelper.
@@ -1298,26 +1258,22 @@ Section PreservationTTypes.
         eassumption. eassumption.
       * apply Nat.eqb_eq in HeqN1.
         apply Nat.eqb_neq in HeqN2. subst. simpl.
-        rewrite double_update_indep in Heq3.
-        rewrite double_update in Heq3.
-        rewrite double_update_indep in Heq3.
-        erewrite Heq3. erewrite IHe1_1.
+        rewrite double_update_indep in Heq3; eauto.
+        rewrite double_update in Heq3; eauto.
+        rewrite double_update_indep in Heq3; eauto.
+        erewrite Heq3. erewrite IHe1_1; eauto.
         rewrite eqTypeS_refl.
-        erewrite IHe1_2. rewrite eqTypeS_refl. reflexivity.
-        apply anyIn_cons. split; assumption.
-        eassumption. eassumption.
-        apply anyIn_cons. split; assumption.
-        eassumption. eassumption. eassumption. symmetry. assumption.
+        erewrite IHe1_2; eauto. rewrite eqTypeS_refl. reflexivity.
+        apply anyIn_cons. intuition.
+        apply anyIn_cons. intuition.
       * apply Nat.eqb_neq in HeqN1.
         apply Nat.eqb_eq in HeqN2. subst. simpl.
         rewrite double_update in Heq3.
-        erewrite Heq3. erewrite IHe1_1.
+        erewrite Heq3. erewrite IHe1_1; eauto.
         rewrite eqTypeS_refl.
-        erewrite IHe1_2. rewrite eqTypeS_refl. reflexivity.
-        apply anyIn_cons. split; assumption.
-        eassumption. eassumption.
-        apply anyIn_cons. split; assumption.
-        eassumption. eassumption.
+        erewrite IHe1_2; eauto. rewrite eqTypeS_refl. reflexivity.
+        apply anyIn_cons. intuition.
+        apply anyIn_cons. intuition.
       * apply Nat.eqb_neq in HeqN1.
         apply Nat.eqb_neq in HeqN2.
         subst. simpl. erewrite IHe1_1. shelve.
@@ -1329,13 +1285,10 @@ Section PreservationTTypes.
         erewrite IHe1_2. shelve.
         apply anyIn_cons. split; assumption.
         rewrite Heq2. reflexivity. assumption. Unshelve.
-        erewrite IHe1_3. rewrite eqTypeS_refl.
-        reflexivity.
+        erewrite IHe1_3. rewrite eqTypeS_refl. reflexivity.
         apply anyIn_cons. split; assumption.
-        erewrite (double_update_indep _ n1 _ n0).
-        erewrite (double_update_indep _ n2 _ n0).
-        rewrite Heq3. reflexivity. symmetry. assumption.
-        symmetry. assumption.
+        erewrite (double_update_indep _ n1 _ n0); eauto.
+        erewrite (double_update_indep _ n2 _ n0); eauto.
         erewrite typeOf_unbound; try eassumption.
         erewrite typeOf_unbound; try eassumption.
         erewrite typeOf_unbound; try eassumption.
@@ -1358,15 +1311,13 @@ Section PreservationTTypes.
     apply anyIn_cons in H. destruct H.
     apply anyIn_cons in H0. destruct H0.
     apply anyIn_cons in H0. destruct H0.
-    * eapply subst_preservation.
-      - apply anyIn_cons. split.
-        apply anyIn_subst; try assumption.
-        apply H7.
+    * eapply subst_preservation; eauto.
+      - apply anyIn_cons; intuition.
+        apply anyIn_subst; assumption.
       - eapply subst_preservation.
-        + apply anyIn_cons. split; assumption.
-        + rewrite double_update_indep. eassumption. assumption.
-        + erewrite typeOf_unbound. apply H5. apply H5. apply H9.
-      - apply H4.
+        + apply anyIn_cons; intuition.
+        + rewrite double_update_indep; eassumption.
+        + erewrite typeOf_unbound; eassumption.
   Qed.
 
   Lemma step_preservation :
@@ -1490,28 +1441,23 @@ End PreservationTTypes.
 
 Section Proofs.
 
-  Hint Resolve more_specific_ND compatible_ND : core.
+  Hint Resolve more_specific_ND compatible_ND Single_Step
+               more_specific_refl : core.
 
   Lemma compatibility:
     forall e Rho Gamma t d,
     compatibleCtx Gamma Rho ->
     typeOf Rho e = Some t ->
-    Gamma |- e ::: d ->
+    Gamma |- e :? d ->
     compatible d t.
   Proof.
     induction e; intros.
-    - inversion H1; subst.
-      simpl in H0. inversion H0.
-      unfold compatibleCtx in *.
-      destruct (Rho n) eqn:HeqR; rewrite <- HeqR; apply H.
-    - inversion H1; subst. simpl in H1. simpl in H0. inversion H0.
-      reflexivity.
-    - inversion H1; subst. simpl in H1. simpl in H0. inversion H0.
-      reflexivity.
-    - inversion H1; subst. simpl in H1. simpl in H0. inversion H0.
-      reflexivity.
-    - inversion H1. subst. simpl.
-      destruct_typeOf_chain H0.
+    - inversion H1; inversion H0; subst.
+      unfold compatibleCtx in *. apply H.
+    - inversion H1. inversion H0. reflexivity.
+    - inversion H1. inversion H0. reflexivity.
+    - inversion H1. inversion H0. reflexivity.
+    - inversion H1. subst. destruct_typeOf_chain H0.
       destruct d1, d2; auto; reflexivity.
     - inversion H1; subst.
       + reflexivity.
@@ -1546,11 +1492,9 @@ Section Proofs.
       + apply Nat.eqb_eq in HeqN1. subst.
         contradiction.
       + apply Nat.eqb_neq in HeqN1.
-        rewrite double_update_indep.
-        apply update_compatible.
-        apply update_compatible.
-        apply H. apply H11. apply H9.
-        apply HeqN1.
+        rewrite double_update_indep; eauto.
+        apply update_compatible; eauto.
+        apply update_compatible; eauto.
       + assumption.
   Qed.
 
@@ -1562,26 +1506,26 @@ Section Proofs.
     forall e Rho Gamma t,
     compatibleCtx Gamma Rho ->
     typeOf Rho e = Some t ->
-    exists d, Gamma |- e ::: d /\ compatible d t.
+    exists d, Gamma |- e :? d /\ compatible d t.
   Proof.
     intro e.
     induction e; intros Rho Gamma t0 HG HW.
     * destruct (Gamma n) eqn:Heq.
-        - exists D. split. apply Rule_Var.
+        - exists Det. split. apply Rule_Var.
           rewrite Heq. reflexivity.
           eapply compatibility in HW. apply HW.
           eassumption. eapply Rule_Var. assumption.
-        - exists ND. split. apply Rule_Var.
+        - exists Any. split. apply Rule_Var.
           rewrite Heq. reflexivity. reflexivity.
         - exists (Arrow d1 d2). split. apply Rule_Var.
           rewrite Heq. reflexivity.
           eapply compatibility in HW. apply HW.
           eassumption. eapply Rule_Var. assumption.
-    * exists D. split. apply Rule_BTrue.
+    * exists Det. split. apply Rule_BTrue.
       simpl in HW. inversion HW. reflexivity.
-    * exists D. split. apply Rule_BFalse.
+    * exists Det. split. apply Rule_BFalse.
       simpl in HW. inversion HW. reflexivity.
-    * exists D. split. apply Rule_Nil.
+    * exists Det. split. apply Rule_Nil.
       simpl in HW. inversion HW. reflexivity.
     * destruct_typeOf_chain HW.
       destruct (IHe1 Rho Gamma t2 HG Heq2), H,
@@ -1594,7 +1538,7 @@ Section Proofs.
                (IHe2 Rho Gamma t1_1 HG Heq2), H1, x.
       - eapply compatibility with (t:= TArrow _ _) in H.
         inversion H. eassumption. apply Heq1.
-      - exists ND. split. eapply Rule_AppND.
+      - exists Any. split. eapply Rule_AppAny.
         apply H. apply H1. reflexivity.
       - eexists. split. eapply Rule_AppFun.
         apply H. apply H1.
@@ -1615,7 +1559,7 @@ Section Proofs.
     * destruct_typeOf_chain HW.
       destruct (IHe1 Rho Gamma t0 HG Heq1), H,
                (IHe2 Rho Gamma t0 HG Heq0), H1.
-      exists ND. split. eapply Rule_Choice. apply H. apply H1.
+      exists Any. split. eapply Rule_Choice. apply H. apply H1.
       reflexivity.
     * destruct_typeOf_chain HW.
       destruct (IHe1 _ _ _ HG Heq1), H,
@@ -1629,7 +1573,7 @@ Section Proofs.
                (IHe2 _ _ _ HG Heq2), H1.
       eapply IHe3 in Heq3. destruct Heq3, H3.
       exists (lub x x0 x1). split.
-      eapply Rule_CaseList with (d1 := ND);
+      eapply Rule_CaseList with (d1 := Any);
       try eassumption. reflexivity.
       apply compatible_lub; try assumption.
       destruct x; inversion H0; reflexivity.
@@ -1639,9 +1583,9 @@ Section Proofs.
   Qed.
 
   Lemma hasDType_unbound : forall e Gamma d1 d2 n,
-    Gamma |- e ::: d1 ->
+    Gamma |- e :? d1 ->
     anyIn (freeVars e) [n] = false ->
-    update Nat.eqb Gamma n d2 |- e ::: d1.
+    update Nat.eqb Gamma n d2 |- e :? d1.
   Proof.
     fix hasDType_unbound 1.
     induction e; intros.
@@ -1669,7 +1613,7 @@ Section Proofs.
       apply anyIn_concat2 in H0. destruct H0 as [H0_1 H0_2].
       inversion H; subst; simpl in *.
       + eapply IHe1 in H3; eauto. eapply IHe2 in H5; eauto.
-        eapply Rule_AppND; eauto.
+        eapply Rule_AppAny; eauto.
       + eapply IHe1 in H2; eauto. eapply IHe2 in H4; eauto.
         eapply Rule_AppFun; eauto.
     - inversion H. subst. simpl in *.
@@ -1741,12 +1685,12 @@ Section Proofs.
     typeOf Rho e2 = Some t2 ->
     compatibleCtx Gamma Rho ->
     compatible d2 t2 ->
-    update Nat.eqb Gamma n d2 |- e1 ::: d1 ->
+    update Nat.eqb Gamma n d2 |- e1 :? d1 ->
     more_specific d3 d2 = true ->
-    Gamma |- e2 ::: d3 ->
+    Gamma |- e2 :? d3 ->
     exists d4,
       more_specific d4 d1 = true /\
-      Gamma |- subst n e2 e1 ::: d4.
+      Gamma |- subst n e2 e1 :? d4.
   Proof.
     induction e1; intro;
     intros Rho Gamma t2 d2 d1 d3 n0 H H0 H1 H3 H4; intros.
@@ -1761,14 +1705,11 @@ Section Proofs.
         apply more_specific_refl.
         apply Rule_Var. reflexivity.
     - inversion H2. subst. simpl in *.
-      exists D. split. apply more_specific_refl.
-      apply Rule_BTrue.
+      exists Det. intuition. apply Rule_BTrue.
     - inversion H2. subst. simpl in *.
-      exists D. split. apply more_specific_refl.
-      apply Rule_BFalse.
+      exists Det. intuition. apply Rule_BFalse.
     - inversion H2. subst. simpl in *.
-      exists D. split. apply more_specific_refl.
-      apply Rule_Nil.
+      exists Det. intuition. apply Rule_Nil.
     - inversion H2. subst. simpl in *.
       apply anyIn_cons in H. destruct H as [HH1 HH2].
       apply anyIn_concat1 in HH1. destruct HH1 as [HH3 HH4].
@@ -1797,7 +1738,7 @@ Section Proofs.
           apply anyIn_cons. split; assumption.
           assumption.
         * eexists. split. apply more_specific_ND.
-          eapply Rule_AppND. apply H8. apply H10.
+          eapply Rule_AppAny. apply H8. apply H10.
         * eexists. split. apply more_specific_ND.
           eapply Rule_AppFun. apply H8. apply H10.
           reflexivity.
@@ -1852,7 +1793,7 @@ Section Proofs.
       edestruct IHe1_2 in H10; try eassumption.
       apply anyIn_cons. split; eassumption.
       destruct H, H0.
-      exists ND. split. apply more_specific_ND.
+      exists Any. split. apply more_specific_ND.
       simpl. eapply Rule_Choice; eassumption.
     - inversion H2. subst.
       remember H0 as HC. clear HeqHC.
@@ -1891,16 +1832,12 @@ Section Proofs.
       apply anyIn_cons in HH6.
       destruct HH6 as [HH8 HH9].
       destruct_typeOf_chain HC.
-      edestruct IHe1_1 in H0_1.
-      apply anyIn_cons. split; try eassumption.
-      rewrite Heq1. reflexivity. eassumption. eassumption.
-      eassumption. eassumption. eassumption. eassumption.
-      destruct H. edestruct IHe1_2 in H0_2.
-      apply anyIn_cons. split; try eassumption.
-      rewrite Heq2. reflexivity. eassumption. eassumption.
-      eassumption. eassumption. eassumption. eassumption.
-      destruct H8, (n0 =? n1) eqn:HeqN1,
-                   (n0 =? n2) eqn:HeqN2.
+      edestruct IHe1_1 with (e2:=e2) in H0_1; eauto.
+      apply anyIn_cons. intuition. rewrite Heq1. reflexivity.
+      edestruct IHe1_2 with (e2:=e2) in H0_2; eauto.
+      apply anyIn_cons. intuition. rewrite Heq2. reflexivity.
+      destruct H, H0, (n0 =? n1) eqn:HeqN1,
+                      (n0 =? n2) eqn:HeqN2.
       + rewrite Nat.eqb_eq in HeqN1. subst n1.
         rewrite Nat.eqb_eq in HeqN2. subst n2.
         contradiction.
@@ -2006,14 +1943,14 @@ Section Proofs.
     compatibleCtx Gamma Rho ->
     compatible d2 t2 ->
     compatible d3 t3 ->
-    update Nat.eqb (update Nat.eqb Gamma n3 d3) n2 d2 |- e1 ::: d1 ->
+    update Nat.eqb (update Nat.eqb Gamma n3 d3) n2 d2 |- e1 :? d1 ->
     more_specific d2' d2 = true ->
     more_specific d3' d3 = true ->
-    Gamma |- e2 ::: d2' ->
-    Gamma |- e3 ::: d3' ->
+    Gamma |- e2 :? d2' ->
+    Gamma |- e3 :? d3' ->
     exists d4,
       more_specific d4 d1 = true /\
-      Gamma |- subst n2 e2 (subst n3 e3 e1) ::: d4.
+      Gamma |- subst n2 e2 (subst n3 e3 e1) :? d4.
   Proof.
     intros.
     apply anyIn_cons in H. destruct H.
@@ -2021,38 +1958,27 @@ Section Proofs.
     apply anyIn_cons in H0. destruct H0.
     apply anyIn_cons in H0. destruct H0.
     destruct_typeOf_chain H2.
-    edestruct subst_lemma with (e1 := e1) (n := n3).
-    + apply anyIn_cons. split. apply H0. apply H16.
+    edestruct subst_lemma with (e1 := e1) (e2 := e3) (n := n3).
+    + apply anyIn_cons. split; assumption.
     + unfold well_typed.
-      rewrite double_update_indep in Heq1.
-      rewrite Heq1. reflexivity. symmetry. assumption.
-    + erewrite typeOf_unbound. apply H4. apply H4. assumption.
-    + eapply (update_compatible _ (Rho)). eassumption.
-      eassumption.
-    + apply H8.
-    + rewrite double_update_indep in H9.
-      apply H9. symmetry. assumption.
+      rewrite double_update_indep in Heq1; eauto.
+      rewrite Heq1. reflexivity.
+    + erewrite typeOf_unbound; eauto.
+    + eapply (update_compatible _ Rho); eauto.
+    + eassumption.
+    + rewrite double_update_indep in H9; eauto.
     + eassumption.
     + apply hasDType_unbound; assumption.
     + destruct H18.
-      edestruct subst_lemma with (e1 := subst n3 e3 e1) (n := n2).
-      - apply anyIn_cons. split. apply anyIn_subst. apply H.
-        apply H16. apply H1. apply H15.
+      edestruct subst_lemma with (e2 := e2) (n := n2); eauto.
+      - apply anyIn_cons; intuition. apply anyIn_subst; eauto.
       - unfold well_typed.
-        erewrite subst_preservation. reflexivity.
-        apply anyIn_cons. split; assumption.
-        rewrite double_update_indep.
-        rewrite Heq1. reflexivity. assumption.
+        erewrite subst_preservation; eauto.
+        apply anyIn_cons; intuition.
+        rewrite double_update_indep; eauto.
         erewrite typeOf_unbound; eassumption.
-      - assumption.
-      - apply H6.
-      - apply H7.
-      - apply H19.
-      - eassumption.
-      - eassumption.
-      - destruct H20. exists x0. split.
+      - destruct H20. exists x0. intuition.
         eapply more_specific_transitive; eassumption.
-        apply H21.
   Qed.
 
   (* Theorem preservation:
@@ -2064,83 +1990,62 @@ Section Proofs.
     e ==> e' ->
     typeOf Rho e = Some t ->
     compatible d t ->
-    Gamma |- e ::: d ->
+    Gamma |- e :? d ->
     exists d', more_specific d' d = true /\ compatible d' t
-      /\ Gamma |- e' ::: d'.
+      /\ Gamma |- e' :? d'.
   Proof.
-    induction e; intros e' Rho Gamma t0 d0 HX H HW HC H0; inversion H.
-    * inversion H1.
-    * inversion H1.
-    * inversion H1.
-    * inversion H1.
-    * inversion H1. inversion H0. subst.
+    induction e; intros e' Rho Gamma t0 d0 HX H HW HC H0;
+    inversion H; inversion H1; subst.
+    * inversion H0. subst.
       destruct_typeOf_chain HW.
       destruct (step e1) eqn:Heq.
       + inversion H5. subst.
-        edestruct IHe1. eassumption.
-        apply Single_Step. apply Heq. eassumption.
+        edestruct IHe1; try eassumption.
+        apply Single_Step. apply Heq.
         eapply compatibility; eassumption.
-        apply H7. destruct H2, H3.
+        destruct H2, H3.
         eexists. split. shelve. split. shelve.
-        eapply Rule_Cons. eassumption. eassumption.
-        reflexivity. Unshelve.
+        eapply Rule_Cons; eauto. Unshelve.
         destruct d1, d2, x; try reflexivity;
         try inversion H8; try inversion H2.
         destruct x, d2; reflexivity.
       + destruct (step e2) eqn:Heq4; inversion H5.
-        subst.
-        edestruct IHe2. eassumption.
+        subst. edestruct IHe2. try eassumption.
         apply Single_Step. apply Heq4. eassumption.
-        eapply compatibility. eassumption.
-        apply Heq1. eassumption.
-        apply H9. destruct H2, H3.
+        eapply compatibility; eassumption.
+        assumption. destruct H2, H3.
         eexists. split. shelve. split. shelve.
-        eapply Rule_Cons. apply H7. apply H4.
-        reflexivity. Unshelve.
+        eapply Rule_Cons; eauto. Unshelve.
         destruct d1, d2, x; try reflexivity;
         try inversion H8; try inversion H2.
         destruct x, d1; reflexivity.
-    * inversion H1. subst.
-      remember H1 as H1C. clear HeqH1C.
+    * remember H1 as H1C. clear HeqH1C.
       destruct_typeOf_chain HW.
-      destruct e1 eqn:Heq5.
-      + simpl in H5. inversion H5.
-      + inversion H5.
-      + inversion H5.
-      + inversion H5.
-      (* App Cons *)
+      destruct e1 eqn:Heq5; inversion H5; subst.
       + destruct_typeOf_chain Heq1.
       (* App App *)
       + destruct (step (App e3 e4)) eqn:Heq;
         inversion H5.
         inversion H0; subst.
-        - edestruct IHe1 with (d := ND).
+        - edestruct IHe1 with (d := Any).
           eassumption.
           apply Single_Step. apply Heq. eassumption.
-          eapply (compatibility (App e3 e4)).
-          eassumption. assumption.
-          assumption. assumption.
-          destruct H2, H3, x.
-          --  inversion H3.
-          --  exists ND. split. apply more_specific_ND.
-              split. reflexivity.
-              eapply Rule_AppND; eassumption.
-          --  eexists (decide x1 d x2). split.
-              apply more_specific_ND. split.
+          eapply (compatibility (App e3 e4)); eauto.
+          assumption. destruct H2, H4, x.
+          --  inversion H4.
+          --  exists Any; intuition.
+              eapply Rule_AppAny; eassumption.
+          --  eexists (decide x1 d x2); intuition.
               unfold decide. destruct (more_specific d x1).
-              destruct H3. assumption. reflexivity.
-              eapply Rule_AppFun. apply H4 . apply H9. reflexivity.
-        - edestruct IHe1 with (d := (Arrow d1 d2)).
-          eassumption.
-          apply Single_Step. apply Heq. eassumption.
-          eapply (compatibility (App e3 e4)).
-          eassumption. assumption.
-          assumption. assumption.
-          destruct H2, H3, x.
-          --  inversion H3.
+              destruct H4. assumption. reflexivity.
+              eapply Rule_AppFun; eauto.
+        - edestruct IHe1 with (d := (Arrow d1 d2)); eauto.
+          eapply (compatibility (App e3 e4)); eauto.
+          destruct H2, H4, x.
+          --  inversion H4.
           --  inversion H2.
           --  simpl in H2. apply (andb_true_iff) in H2.
-              destruct H2, H3.
+              destruct H2, H4.
               unfold decide. destruct (more_specific d3 d1) eqn:Heq4.
               ++  exists x2. split. assumption. split.
                   assumption. eapply Rule_AppFun.
@@ -2149,38 +2054,32 @@ Section Proofs.
                   reflexivity. eassumption.
                   rewrite more_specific_less_specific.
                   assumption.
-              ++  exists (decide x1 d3 x2). split.
-                  apply more_specific_ND. split.
-                  unfold decide. destruct (more_specific d3 x1).
-                  assumption. reflexivity.
-                  eapply Rule_AppFun; try eassumption.
-                  reflexivity.
+              ++  exists (decide x1 d3 x2); intuition.
+                  unfold decide. destruct (more_specific d3 x1); eauto.
+                  eapply Rule_AppFun; eauto.
       (* App Abs *)
-      + inversion H5. subst.
-        destruct_typeOf_chain Heq1.
+      + destruct_typeOf_chain Heq1.
         destruct (anyIn (freeVars e2) (n :: boundVars e)) eqn:Heq7;
         try discriminate. inversion H5. subst.
         inversion H0.
         - inversion H7.
         - inversion H6; subst. unfold decide in *.
           destruct (more_specific d3 d1) eqn:Heq5.
-          --  edestruct subst_lemma. eassumption.
+          --  edestruct subst_lemma; eauto.
               unfold well_typed. rewrite Heq0. reflexivity.
-              assumption. eassumption. eassumption.
-              eassumption. apply Heq5. assumption.
               destruct H2. eexists. split. apply H2.
-              split. eapply compatibility. eassumption.
-              eapply subst_preservation. eassumption.
-              eassumption. assumption. assumption. assumption.
+              split. eapply compatibility; eauto.
+              eapply subst_preservation; eassumption.
+              eassumption.
           --  edestruct completeness. eassumption.
               eapply subst_preservation; eassumption.
               destruct H2. eexists. split.
-              apply more_specific_ND. split. apply H4. apply H2.
+              apply more_specific_ND. split; eassumption.
       (* App Or *)
       + destruct d0.
         - inversion H0; inversion H4.
         - inversion H0; try inversion H4.
-          exists ND. split. apply more_specific_ND.
+          exists Any. split. apply more_specific_ND.
           split. reflexivity. inversion H5. subst.
           destruct_typeOf_chain Heq1.
           eapply (step_preservation (App (Or e3 e4) e2)
@@ -2198,27 +2097,24 @@ Section Proofs.
       + destruct (step (CaseB e3 e4 e5)) eqn:Heq;
         inversion H5; subst; inversion H0; subst.
         - edestruct IHe1. eassumption. apply Single_Step. apply Heq.
-          rewrite Heq1. reflexivity. eapply compatibility.
-          eassumption. apply Heq1. eassumption. assumption.
-          destruct H2, H3.
-          destruct x.
-          --  inversion H3.
-          --  exists ND. split. apply more_specific_ND.
-              split. reflexivity.
-              eapply Rule_AppND; eassumption.
+          rewrite Heq1. reflexivity. eapply compatibility; eauto.
+          eassumption. destruct H2, H2, H4, x.
+          --  inversion H2.
+          --  exists Any; intuition.
+              eapply Rule_AppAny; eassumption.
           --  exists (decide x1 d x2). split.
               apply more_specific_ND. split.
               unfold decide. destruct (more_specific d x1).
-              destruct H3. assumption. reflexivity.
-              eapply Rule_AppFun; try eassumption. reflexivity.
+              destruct H2. assumption. reflexivity.
+              eapply Rule_AppFun; eauto.
         - edestruct IHe1. eassumption. apply Single_Step.
           apply Heq. rewrite Heq1. reflexivity. eapply compatibility.
           eassumption. apply Heq1. eassumption. assumption.
-          destruct H2, H3, x.
-          --  inversion H3.
+          destruct H2, H4, x.
+          --  inversion H4.
           --  inversion H2.
           --  simpl in H2. apply (andb_true_iff) in H2.
-              destruct H2, H3.
+              destruct H2, H4.
               rewrite <- more_specific_less_specific in H2.
               exists (decide x1 d3 x2). split. unfold decide.
               destruct (more_specific d3 x1) eqn:M1,
@@ -2235,23 +2131,23 @@ Section Proofs.
         - edestruct IHe1. eassumption. apply Single_Step. apply Heq.
           rewrite Heq1. reflexivity. eapply compatibility.
           eassumption. apply Heq1. eassumption. assumption.
-          destruct H2, H3, x.
-          --  inversion H3.
-          --  exists ND. split. apply more_specific_ND.
+          destruct H2, H4, x.
+          --  inversion H4.
+          --  exists Any. split. apply more_specific_ND.
               split. reflexivity.
-              eapply Rule_AppND; eassumption.
+              eapply Rule_AppAny; eassumption.
           --  exists (decide x1 d x2). split. apply more_specific_ND.
               split. unfold decide. destruct (more_specific d x1).
-              destruct H3. assumption. reflexivity.
+              destruct H4. assumption. reflexivity.
               eapply Rule_AppFun; try eassumption. reflexivity.
         - edestruct IHe1. eassumption. apply Single_Step.
           apply Heq. rewrite Heq1. reflexivity. eapply compatibility.
           eassumption. apply Heq1. eassumption. assumption.
-          destruct H2, H3, x.
-          --  inversion H3.
+          destruct H2, H4, x.
+          --  inversion H4.
           --  inversion H2.
           --  simpl in H2. apply (andb_true_iff) in H2.
-              destruct H2, H3.
+              destruct H2, H4.
               rewrite <- more_specific_less_specific in H2.
               exists (decide x1 d3 x2). split. unfold decide.
               destruct (more_specific d3 x1) eqn:M1,
@@ -2263,25 +2159,20 @@ Section Proofs.
               split. unfold decide. destruct (more_specific d3 x1).
               assumption. reflexivity.
               eapply Rule_AppFun; try eassumption. reflexivity.
-    * inversion H1.
     (* Or *)
     * inversion H1. inversion H0. subst.
       destruct_typeOf_chain HW.
       destruct (step e1) eqn:Heq3.
       + inversion H5. subst.
         edestruct IHe1. eassumption. apply Single_Step. eassumption.
-        eassumption. shelve. eassumption.
-        destruct H2, H3. exists ND. split. apply more_specific_refl.
-        split. reflexivity. eapply Rule_Choice; eassumption.
-        Unshelve. eapply (compatibility e1). eassumption.
-        apply Heq1. eassumption.
+        eassumption. eapply (compatibility e1); eassumption.
+        eassumption. destruct H2, H4. exists Any; intuition.
+        eapply Rule_Choice; eassumption.
       + destruct (step e2) eqn:Heq4; inversion H5. subst.
         edestruct IHe2. eassumption. apply Single_Step. eassumption.
-        eassumption. shelve. eassumption.
-        destruct H2, H3. exists ND. split. apply more_specific_refl.
-        split. reflexivity. eapply Rule_Choice; eassumption.
-        Unshelve. eapply (compatibility e2). eassumption.
-        assumption. eassumption.
+        eassumption. eapply (compatibility e2); eassumption.
+        eassumption. destruct H2, H4. exists Any; intuition.
+        eapply Rule_Choice; eassumption.
     (* Case *)
     * inversion H1. inversion H0. subst.
       destruct_typeOf_chain HW.
@@ -2292,7 +2183,7 @@ Section Proofs.
       + eexists. split. apply more_specific_lub2. split.
         eapply compatibility. apply HX. apply Heq2. eassumption.
         eassumption.
-      + inversion H9. subst. exists ND. split.
+      + inversion H8. subst. exists Any. split.
         destruct d2, d3; reflexivity.
         split. reflexivity.
         destruct_typeOf_chain Heq1.
@@ -2302,13 +2193,13 @@ Section Proofs.
         destruct H2. edestruct (completeness (CaseB e1_1 e2 e3)).
         eassumption. unfold well_typed. simpl.
         rewrite Heq0, Heq2, Heq3. rewrite eqType_refl. reflexivity.
-        destruct H4. eapply Rule_Choice; eapply Rule_CaseBool; eassumption.
+        destruct H6. eapply Rule_Choice; eapply Rule_CaseBool; eassumption.
     * destruct p. inversion H1. inversion H0. subst.
       destruct_typeOf_chain HW.
       destruct e1; inversion H5; subst.
       + eexists. split. apply more_specific_lub2. split.
         eapply compatibility. apply HX. apply Heq2. eassumption.
-        apply H19.
+        assumption.
       + destruct (anyIn (freeVars e1_1 ++ freeVars e1_2)
                     (n1 :: n2 :: boundVars e3)) eqn:Heq6;
         try discriminate.
@@ -2316,97 +2207,56 @@ Section Proofs.
         try discriminate. inversion H3. subst.
         apply anyIn_concat2 in Heq6. destruct Heq6.
         destruct_typeOf_chain Heq1.
-        inversion H16. subst. subst Gamma'. subst Gamma''.
-        specialize (compatibility _ _ _ _ _ HX Heq8 H10) as H22.
-        specialize (compatibility _ _ _ _ _ HX Heq5 H12) as H23.
-        specialize (compatibility _ _ _ _ _ HX Heq2 H19) as H24.
-        rewrite double_update_indep in Heq3; try symmetry; try assumption.
-        specialize (update_update_compatible _ _ n1 n2 _ _ _ _ HX H17 H18) as HXC.
-        specialize (compatibility _ _ _ _ _ HXC Heq3 H20)  as H25.
+        inversion H15. subst. subst Gamma'. subst Gamma''.
+        specialize (compatibility _ _ _ _ _ HX Heq8 H11) as H22.
+        specialize (compatibility _ _ _ _ _ HX Heq5 H14) as H23.
+        specialize (compatibility _ _ _ _ _ HX Heq2 H18) as H24.
+        rewrite double_update_indep in Heq3; intuition.
+        specialize update_compatible as HX'.
+        eapply (compatibility _ _ _ _ _) in H19 as H20; eauto.
         destruct (more_specific d3 d2) eqn:Heq11,
                  (more_specific d0 d1) eqn:Heq12.
-        --- edestruct subst_lemma2. apply H6. apply H2.
-            apply Heq7. unfold well_typed.
-            rewrite Heq3. reflexivity.
-            assumption. assumption. symmetry. assumption.
-            eassumption. apply H18. apply H17.
-            apply H20. apply Heq11. apply Heq12. apply H12.
-            apply H10. destruct H7. exists x. split.
-            **  destruct d0.
-                --  destruct d3.
-                    ++  destruct d_2, d_3; unfold lub, lub2; simpl;
-                        try apply more_specific_ND. apply H7.
-                    ++  destruct d_2, d_3; simpl;
-                        apply more_specific_ND.
-                    ++  destruct d_2, d_3; simpl;
-                        apply more_specific_ND.
-                --  destruct d_2, d_3; simpl; apply more_specific_ND.
-                --  destruct d_2, d_3; simpl; apply more_specific_ND.
+        --- destruct (subst_lemma2 _ _ _ Rho Gamma (TList t1)
+                        t1 d_3 d2 d1 _ _ d3 d0 H7 H4); eauto.
+            unfold well_typed. rewrite Heq3. reflexivity.
+            destruct H12. exists x. split.
+            **  destruct d0, d3, d_2, d_3; eauto.
             **  split. eapply compatibility. apply HX.
-                eapply subst_preservation2. apply H6. apply H2.
-                apply Heq7. symmetry. assumption. rewrite Heq3.
-                reflexivity. assumption. assumption. assumption.
-                assumption.
+                eapply (subst_preservation2 _ _ _ _ _ _ _ _ _
+                          H7 H4); eauto.
+                assumption. assumption.
         --- destruct t1, d0, d1; try inversion Heq12;
-            try inversion H17; try inversion H22.
-            +++ edestruct completeness. apply HX.
-                eapply subst_preservation2.
-                apply H6. apply H2. assumption. symmetry. assumption.
-                rewrite Heq3. reflexivity. assumption. assumption.
-                destruct H7. exists x.
-                split. destruct d_2, d_3; apply more_specific_ND.
-                split. assumption. assumption.
-            +++ edestruct completeness. apply HX.
-                eapply subst_preservation2.
-                apply H6. apply H2. assumption. symmetry. assumption.
-                rewrite Heq3. reflexivity. assumption. assumption.
-                destruct H7. exists x.
-                split. destruct d_2, d_3; apply more_specific_ND.
-                split. assumption. assumption.
-            +++ edestruct completeness. apply HX.
-                eapply subst_preservation2.
-                apply H6. apply H2. assumption. symmetry. assumption.
-                rewrite Heq3. reflexivity. assumption. assumption.
-                destruct H11. exists x.
-                split. destruct d_2, d_3; apply more_specific_ND.
-                split. assumption. assumption.
-            +++ edestruct completeness. apply HX.
-                eapply subst_preservation2.
-                apply H6. apply H2. assumption. symmetry. assumption.
-                rewrite Heq3. reflexivity. assumption. assumption.
-                destruct H21. exists x.
-                split. destruct d_2, d_3; apply more_specific_ND.
-                split. assumption. assumption.
+            try inversion H16; try inversion H22;
+            edestruct completeness as [x HCO]; try apply HX;
+            try eapply (subst_preservation2 _ _ _ _ _ _ _ _ _
+                          H7 H4); eauto;
+            destruct HCO; exists x; destruct d_2, d_3; eauto.
         --- destruct d3, d2; try inversion Heq11;
-            try inversion H23; try inversion H18.
+            try inversion H23; try inversion H17.
             edestruct completeness. apply HX.
             eapply subst_preservation2.
-            apply H6. apply H2. assumption. symmetry. assumption.
+            apply H7. apply H4. assumption. symmetry. assumption.
             rewrite Heq3. reflexivity. assumption. assumption.
-            destruct H7. exists x.
-            split. destruct d0, d_2, d_3; apply more_specific_ND.
-            split. assumption. assumption.
+            destruct H12. exists x. destruct d0, d_2, d_3; eauto.
         --- destruct d3, d2; try inversion Heq11;
-            try inversion H23; try inversion H18.
+            try inversion H23; try inversion H17.
             edestruct completeness. apply HX.
             eapply subst_preservation2.
-            apply H6. apply H2. assumption. symmetry. assumption.
+            apply H7. apply H4. assumption. symmetry. assumption.
             rewrite Heq3. reflexivity. assumption. assumption.
-            destruct H7. exists x.
-            split. destruct d0, d_2, d_3; apply more_specific_ND.
-            split. assumption. assumption.
-      + inversion H16. subst. exists ND. split.
+            destruct H12. exists x. destruct d0, d_2, d_3; eauto.
+      + inversion H15. subst. exists Any. split.
         destruct d_2, d_3; reflexivity.
         split. reflexivity.
         destruct_typeOf_chain Heq1.
         edestruct (completeness (CaseL e1_2 e2 (Pat n1 t1 n2 n) e3)).
         eassumption. unfold well_typed. simpl.
         rewrite Heq6, Heq3, Heq2, eqTypeS_refl, eqTypeS_refl.
-        reflexivity. destruct H2.
+        reflexivity. destruct H4.
         edestruct (completeness (CaseL e1_1 e2 (Pat n1 t1 n2 n) e3)).
         eassumption. unfold well_typed. simpl.
         rewrite Heq5, Heq3, Heq2, eqTypeS_refl, eqTypeS_refl.
-        reflexivity. destruct H6.
+        reflexivity. destruct H7.
         eapply Rule_Choice; eapply Rule_CaseList; eassumption.
   Qed.
 
@@ -2416,39 +2266,37 @@ Section Proofs.
     compatibleCtx Gamma Rho ->
     typeOf Rho e = Some t ->
     compatible d t ->
-    Gamma |- e ::: d ->
+    Gamma |- e :? d ->
     exists d', more_specific d' d = true
       /\ compatible d t
-      /\ Gamma |- e' ::: d'.
+      /\ Gamma |- e' :? d'.
   Proof.
-    intros e e' t H. induction H; intros.
-    * exists d. split. apply more_specific_refl.
-      split; assumption.
-    * remember H as HC. clear HeqHC. inversion HC.
-      remember H2 as H2C. clear HeqH2C.
-      eapply (step_preservation _ _ _ _ H5) in H2.
-      apply (preservation e1 e2 Rho Gamma t d) in H; try assumption.
-      destruct H, H, H5, H8.
-      destruct (IHmulti_step_rel Rho Gamma x); eauto.
-      destruct H9, H10. exists x0. split.
-      eapply more_specific_transitive; eauto.
-      split; assumption.
+    intros e e' t H. induction H; intros; eauto.
+    remember H as HC. clear HeqHC. inversion HC.
+    remember H2 as H2C. clear HeqH2C.
+    eapply (step_preservation _ _ _ _ H5) in H2.
+    apply (preservation e1 e2 Rho Gamma t d) in H; try assumption.
+    destruct H, H, H5, H8.
+    destruct (IHmulti_step_rel Rho Gamma x); eauto.
+    destruct H9, H10. exists x0. split.
+    eapply more_specific_transitive; eauto.
+    split; assumption.
   Qed.
 
   (* Theorem soundness:
-   The main theorem showing that if an expression e has deterministic type D,
+   The main theorem showing that if an expression e has deterministic type Det,
    then any expression e' that e reduces to will not be a non-deterministic choice.
    This validates that the determinism type system correctly tracks non-determinism. *)
   Theorem soundness : forall Rho Gamma e e' t,
     compatibleCtx Gamma Rho ->
     typeOf Rho e = Some t ->
-    Gamma |- e ::: D ->
-    compatible D t ->
+    Gamma |- e :? Det ->
+    compatible Det t ->
     e ==>* e' ->
     notOr e'.
   Proof.
     intros. destruct (preservation_multi e e' t H3
-                          Rho Gamma D H H0 H2 H1).
+                          Rho Gamma Det H H0 H2 H1).
     destruct H4, H5. apply more_specific_D in H4.
     subst. destruct e'; try reflexivity; try inversion H6.
   Qed.
