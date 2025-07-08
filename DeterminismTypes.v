@@ -1855,14 +1855,14 @@ Section Proofs.
         unfold well_typed in IHe1_3.
         eexists (lub x x0 d_3). split.
         --  apply more_specific_lub; try assumption.
-            eapply compatibility in H0. shelve.
+            eapply compatibility in H8. shelve.
             eassumption.
             eapply subst_preservation.
             apply anyIn_cons. split; assumption.
             apply Heq1. apply H1.
             apply more_specific_refl.
             Unshelve. destruct x;
-            try reflexivity; try inversion H0.
+            try reflexivity; try inversion H8.
         --  simpl. eapply Rule_CaseList; try eassumption.
             rewrite double_update_indep; try eassumption.
       + rewrite Nat.eqb_neq in HeqN1.
@@ -1877,14 +1877,14 @@ Section Proofs.
         unfold well_typed in IHe1_3.
         eexists (lub x x0 d_3). split.
         --  apply more_specific_lub; try assumption.
-            eapply compatibility in H0. shelve.
+            eapply compatibility in H8. shelve.
             eassumption.
             eapply subst_preservation.
             apply anyIn_cons. split; assumption.
             apply Heq1. apply H1.
             apply more_specific_refl.
             Unshelve. destruct x;
-            try reflexivity; try inversion H0.
+            try reflexivity; try inversion H8.
         --  eapply Rule_CaseList; try eassumption.
             rewrite double_update_indep; try eassumption.
       + rewrite Nat.eqb_neq in HeqN1.
@@ -1910,8 +1910,8 @@ Section Proofs.
         * apply more_specific_lub; try assumption.
           remember Heq1 as Heq1C. clear HeqHeq1C.
           eapply compatibility in Heq1; eauto.
-          eapply compatibility with (t:=TList _) in H0; eauto.
-          destruct x; try reflexivity; try inversion H0.
+          eapply compatibility with (t:=TList _) in H8; eauto.
+          destruct x; try reflexivity; try inversion H8.
           eapply subst_preservation; eauto.
           apply anyIn_cons. split; assumption.
           apply update_compatible; eassumption.
