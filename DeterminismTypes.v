@@ -1016,6 +1016,14 @@ Section Examples.
     - inversion H2.
   Qed.
 
+  (* (Det -> Det -> Det) <=
+     (Det -> Any -> Det). *)
+  Example exFlipConst :
+    less_specific
+      (Arrow Det (Arrow Det Det))
+      (Arrow Det (Arrow Any Det)) = true.
+  Proof. intuition. Qed.
+
 End Examples.
 
 (* Section PreservationTTypesHelper:
