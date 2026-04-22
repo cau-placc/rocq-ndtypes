@@ -1,4 +1,15 @@
-Require Import Strings.String Lists.List Lists.ListSet PeanoNat EqNat Bool FunctionalExtensionality Coq.Program.Equality.
+From Equations Require Import Equations.
+From Stdlib    Require Import
+  Bool
+  EqNat
+  FunctionalExtensionality
+  PeanoNat
+  Program.Equality
+  Program.Wf
+  Lia
+  Lists.List
+  Lists.ListSet
+  Strings.String.
 Import ListNotations.
 
 (**
@@ -201,8 +212,7 @@ Section Types.
 
   Fixpoint compatible (d : DType) (t : TType) : Prop :=
     match d, t with
-    | Det, TBool => True
-    | Det, TList _ => True
+    | Det, _ => True
     | Any, _ => True
     | Arrow d1 d2, TArrow t1 t2 =>
         compatible d1 t1 /\ compatible d2 t2
@@ -353,22 +363,60 @@ End Context.
    - decide: determines the result type of function application based on specificity *)
 Section Subtyping.
 
-  Fixpoint more_specific (d1 d2 : DType) : bool :=
-    match d1, d2 with
+  Fixpoint det_arrow (d : DType) : bool :=
+    match d with
+    | Det => true
+    | Arrow d1 d2 => andb (det_arrow d1) (det_arrow d2)
+    | _ => false
+    end.
+
+  Fixpoint sizeD (d : DType) : nat :=
+    match d with
+    | Det => 1
+    | Any => 1
+    | Arrow d1 d2 => 1 + sizeD d1 + sizeD d2
+    end.
+
+  Equations more_specific (d1 d2 : DType) : bool
+    by wf (sizeD d1 + sizeD d2) lt :=
+  more_specific _ Any := true;
+  more_specific Det Det := true;
+  more_specific (Arrow d1 d2) Det :=
+    andb (more_specific Det d1) (more_specific d2 Det);
+  more_specific Det (Arrow d1' d2') :=
+    andb (more_specific d1' Det) (more_specific Det d2');
+  more_specific (Arrow d1 d2) (Arrow d1' d2') :=
+    andb (more_specific d1' d1) (more_specific d2 d2');
+  more_specific _ _ := false.
+
+  Next Obligation. simpl. lia. Defined.
+  Next Obligation. simpl. lia. Defined.
+  Next Obligation. simpl. lia. Defined.
+  Next Obligation. simpl. lia. Defined.
+  Next Obligation. simpl. lia. Defined.
+  Next Obligation. simpl. lia. Defined.
+
+  Lemma unfold_more_specific : forall d1 d2,
+    more_specific d1 d2 = match d1, d2 with
     | _, Any => true
     | Det, Det => true
+    | Arrow d1 d2, Det =>
+        andb (more_specific Det d1) (more_specific d2 Det)
+    | Det, Arrow d1' d2' =>
+        andb (more_specific d1' Det) (more_specific Det d2')
     | Arrow d1 d2, Arrow d1' d2' =>
-        andb (less_specific d1 d1') (more_specific d2 d2')
+        andb (more_specific d1' d1) (more_specific d2 d2')
     | _, _ => false
-    end
-    with less_specific (d1 d2 : DType) : bool :=
-      match d1, d2 with
-      | Any, _ => true
-      | Det, Det => true
-      | Arrow d1 d2, Arrow d1' d2' =>
-          andb (more_specific d1 d1') (less_specific d2 d2')
-      | _, _ => false
-      end.
+    end.
+  Proof.
+    intros. destruct d1, d2; simpl; try reflexivity.
+    - rewrite more_specific_equation_5. reflexivity.
+    - rewrite more_specific_equation_3. reflexivity.
+    - rewrite more_specific_equation_7. reflexivity.
+  Qed.
+
+  Definition less_specific (d1 d2 : DType) : bool :=
+    more_specific d2 d1.
 
   Definition decide (d1 d3 d2 : DType) : DType :=
     if more_specific d3 d1 then d2 else Any.
@@ -400,57 +448,121 @@ Section Subtyping.
     exists (Arrow Det Det), (Arrow Any Any). intuition.
   Qed.
 
-  Lemma more_specific_refl : forall d, more_specific d d = true
-    with less_specific_refl : forall d, less_specific d d = true.
+  Lemma more_specific_refl : forall d, more_specific d d = true.
   Proof.
     - induction d; simpl; trivial.
-      rewrite IHd2. rewrite less_specific_refl. reflexivity.
-    - induction d; simpl; trivial.
-      rewrite IHd2. rewrite more_specific_refl. reflexivity.
+      rewrite more_specific_equation_7.
+      rewrite IHd1. rewrite IHd2. reflexivity.
   Qed.
 
   Lemma more_specific_less_specific : forall d1 d2,
-    more_specific d1 d2 = less_specific d2 d1
-    with less_specific_more_specific : forall d1 d2,
+    more_specific d1 d2 = less_specific d2 d1.
+  Proof.
+    induction d1; intro d2; induction d2; simpl; trivial.
+  Qed.
+
+  Lemma less_specific_more_specific : forall d1 d2,
     less_specific d1 d2 = more_specific d2 d1.
   Proof.
-    --
     induction d1; intro d2; induction d2; simpl; trivial.
-    - rewrite <- IHd1_2.
-      rewrite less_specific_more_specific.
-      reflexivity.
+  Qed.
+
+  Lemma more_specific_Det_l : forall d1 d2,
+    more_specific d1 Det = true ->
+    more_specific Det d2 = true ->
+    more_specific d1 d2 = true
+    with more_specific_Det_r : forall d1 d2,
+      more_specific Det d1 = true ->
+      more_specific d2 Det = true ->
+      more_specific d2 d1 = true.
+  Proof.
     --
-    induction d1; intro d2; induction d2; simpl; trivial.
-    - rewrite <- IHd1_2.
-      rewrite more_specific_less_specific.
-      reflexivity.
+    induction d1; intros; simpl in *; try reflexivity.
+    - apply H0.
+    - inversion H.
+    - rewrite unfold_more_specific in H.
+      rewrite andb_true_iff in H. destruct H.
+      destruct d2.
+      + rewrite unfold_more_specific.
+        rewrite H, H1. reflexivity.
+      + reflexivity.
+      + rewrite unfold_more_specific.
+        rewrite unfold_more_specific in H0.
+        rewrite andb_true_iff in H0. destruct H0.
+        rewrite IHd1_2; try assumption.
+        rewrite more_specific_Det_r; try assumption.
+        reflexivity.
+    --
+    induction d1; intros; simpl in *; try reflexivity.
+    - apply H0.
+    - rewrite unfold_more_specific in H.
+      rewrite andb_true_iff in H. destruct H.
+      destruct d2.
+      + rewrite unfold_more_specific.
+        rewrite H, H1. reflexivity.
+      + inversion H0.
+      + rewrite unfold_more_specific.
+        rewrite unfold_more_specific in H0.
+        rewrite andb_true_iff in H0. destruct H0.
+        rewrite IHd1_2; try assumption.
+        rewrite more_specific_Det_l; try assumption.
+        reflexivity.
   Qed.
 
   Lemma more_specific_transitive : forall d1 d2 d3,
     more_specific d1 d2 = true ->
     more_specific d2 d3 = true ->
-    more_specific d1 d3 = true
-    with less_specific_transitive : forall d1 d2 d3,
+    more_specific d1 d3 = true.
+  Proof.
+    intros d1 d2. generalize dependent d1.
+    induction d2; intros.
+    - destruct d1.
+      + assumption.
+      + inversion H.
+      + destruct d3; simpl in *.
+        * assumption.
+        * reflexivity.
+        * rewrite unfold_more_specific in *.
+          rewrite andb_true_iff in H0. destruct H0.
+          rewrite andb_true_iff in H. destruct H.
+          rewrite more_specific_less_specific; try assumption.
+          rewrite less_specific_more_specific; try assumption.
+          rewrite more_specific_Det_l; try assumption.
+          rewrite more_specific_Det_r; try assumption.
+          reflexivity.
+    - destruct d3; simpl in *.
+      + inversion H0.
+      + assumption.
+      + inversion H0.
+    - destruct d1, d3; simpl in *; trivial.
+      + rewrite unfold_more_specific in *.
+        rewrite andb_true_iff in H. destruct H.
+        rewrite andb_true_iff in H0. destruct H0.
+        erewrite IHd2_1; try assumption.
+        erewrite IHd2_2; try assumption.
+        reflexivity.
+      + rewrite unfold_more_specific in *.
+        rewrite andb_true_iff in H. destruct H.
+        rewrite andb_true_iff in H0. destruct H0.
+        erewrite IHd2_1; try assumption.
+        erewrite IHd2_2; try assumption.
+        reflexivity.
+      + rewrite unfold_more_specific in *.
+        rewrite andb_true_iff in H. destruct H.
+        rewrite andb_true_iff in H0. destruct H0.
+        erewrite IHd2_1; try assumption.
+        erewrite IHd2_2; try assumption.
+        reflexivity.
+  Qed.
+
+  Lemma less_specific_transitive : forall d1 d2 d3,
     less_specific d1 d2 = true ->
     less_specific d2 d3 = true ->
     less_specific d1 d3 = true.
   Proof.
-    --
-    intros. induction d1, d2, d3; simpl; trivial.
-    - inversion H.
-    - inversion H0.
-    - simpl in H. simpl in H0.
-      apply Bool.andb_true_iff in H. destruct H.
-      apply Bool.andb_true_iff in H0. destruct H0.
-      erewrite less_specific_transitive; eauto.
-    --
-    intros. induction d1, d2, d3; simpl; trivial.
-    - inversion H0.
-    - inversion H.
-    - simpl in H. simpl in H0.
-      apply Bool.andb_true_iff in H. destruct H.
-      apply Bool.andb_true_iff in H0. destruct H0.
-      erewrite more_specific_transitive; eauto.
+    intros d1 d2 d3 H1 H2.
+    unfold less_specific in *.
+    apply more_specific_transitive with (d2 := d2); assumption.
   Qed.
 
   Lemma more_specific_Any : forall d, more_specific d Any = true.
@@ -458,23 +570,150 @@ Section Subtyping.
     - induction d; simpl; trivial.
   Qed.
 
-  Lemma more_specific_Det : forall d,
-    more_specific d Det = true -> d = Det.
-  Proof.
-    - induction d; intros; inversion H; simpl; trivial.
-  Qed.
-
 End Subtyping.
 
 Section LeastUpperBound.
 
+  Equations lub_helper (b : bool) (d1 d2 : DType) : DType
+    by wf (sizeD d1 + sizeD d2) lt :=
+  lub_helper true Det Det := Det;
+  lub_helper true (Arrow d1_1 d1_2) Det :=
+    Arrow (lub_helper false d1_1 Det) (lub_helper true d1_2 Det);
+  lub_helper true (Arrow d1_1 d1_2) (Arrow d2_1 d2_2) :=
+    Arrow (lub_helper false d1_1 d2_1) (lub_helper true d1_2 d2_2);
+  lub_helper true Det (Arrow d2_1 d2_2) :=
+    Arrow (lub_helper false Det d2_1) (lub_helper true Det d2_2);
+  lub_helper true _ _ := Any;
+  lub_helper false Any Any := Any;
+  lub_helper false (Arrow d1_1 d1_2) Det :=
+    Arrow (lub_helper true d1_1 Det) (lub_helper false d1_2 Det);
+  lub_helper false (Arrow d1_1 d1_2) (Arrow d2_1 d2_2) :=
+    Arrow (lub_helper true d1_1 d2_1) (lub_helper false d1_2 d2_2);
+  lub_helper false Det (Arrow d2_1 d2_2) :=
+    Arrow (lub_helper true Det d2_1) (lub_helper false Det d2_2);
+  lub_helper false (Arrow d1_1 d1_2) Any :=
+    Arrow d1_1 d1_2;
+  lub_helper false Any (Arrow d2_1 d2_2) :=
+    Arrow d2_1 d2_2;
+  lub_helper false _ _ := Det.
+
+  Next Obligation. simpl. lia. Defined.
+  Next Obligation. simpl. lia. Defined.
+  Next Obligation. simpl. lia. Defined.
+  Next Obligation. simpl. lia. Defined.
+  Next Obligation. simpl. lia. Defined.
+  Next Obligation. simpl. lia. Defined.
+  Next Obligation. simpl. lia. Defined.
+  Next Obligation. simpl. lia. Defined.
+  Next Obligation. simpl. lia. Defined.
+  Next Obligation. simpl. lia. Defined.
+  Next Obligation. simpl. lia. Defined.
+  Next Obligation. simpl. lia. Defined.
+
   Definition lub2 (d1 d2 : DType) : DType :=
-    if more_specific d1 d2 then d2
-    else if more_specific d2 d1 then d1
-    else Any.
+    lub_helper true d1 d2.
+
+  Definition glb2 (d1 d2 : DType) : DType :=
+    lub_helper false d1 d2.
+
+  Lemma unfold_lub2 : forall d1 d2,
+    lub2 d1 d2 = match d1, d2 with
+    | Det, Det => Det
+    | Arrow d1_1 d1_2, Det =>
+        Arrow (glb2 d1_1 Det) (lub2 d1_2 Det)
+    | Arrow d1_1 d1_2, Arrow d2_1 d2_2 =>
+        Arrow (glb2 d1_1 d2_1) (lub2 d1_2 d2_2)
+    | Det, Arrow d2_1 d2_2 =>
+        Arrow (glb2 Det d2_1) (lub2 Det d2_2)
+    | Any, Any => Any
+    | Det, Any => Any
+    | Arrow _ _, Any => Any
+    | Any, Det => Any
+    | Any, Arrow _ _ => Any
+    end.
+  Proof.
+    intros. destruct d1, d2; simpl; try reflexivity.
+    - rewrite lub_helper_equation_3. reflexivity.
+    - rewrite lub_helper_equation_5. reflexivity.
+    - rewrite lub_helper_equation_7. reflexivity.
+  Qed.
+
+  Lemma unfold_glb2 : forall d1 d2,
+    glb2 d1 d2 = match d1, d2 with
+    | Det, Det => Det
+    | Arrow d1_1 d1_2, Det =>
+        Arrow (lub2 d1_1 Det) (glb2 d1_2 Det)
+    | Arrow d1_1 d1_2, Arrow d2_1 d2_2 =>
+        Arrow (lub2 d1_1 d2_1) (glb2 d1_2 d2_2)
+    | Det, Arrow d2_1 d2_2 =>
+        Arrow (lub2 Det d2_1) (glb2 Det d2_2)
+    | Any, Any => Any
+    | Det, Any => Det
+    | Arrow d1_1 d1_2, Any =>
+        Arrow d1_1 d1_2
+    | Any, Det => Det
+    | Any, Arrow d2_1 d2_2 =>
+        Arrow d2_1 d2_2
+    end.
+  Proof.
+    intros. destruct d1, d2; simpl; try reflexivity.
+    - rewrite lub_helper_equation_10. reflexivity.
+    - rewrite lub_helper_equation_14. reflexivity.
+    - rewrite lub_helper_equation_16. reflexivity.
+  Qed.
 
   Definition lub (d1 d2 d3 : DType) : DType :=
-    lub2 (lub2 d1 d2) d3.
+    match d1 with
+    | Det => lub2 d2 d3
+    | _ => Any
+    end.
+
+  Lemma compatible_lub2 : forall t d1 d2,
+    compatible d1 t ->
+    compatible d2 t ->
+    compatible (lub2 d1 d2) t
+    with compatible_glb2 : forall t d1 d2,
+    compatible d1 t ->
+    compatible d2 t ->
+    compatible (glb2 d1 d2) t.
+  Proof.
+    --
+    induction t; intros.
+    - destruct d1, d2; try reflexivity; try assumption.
+    - destruct d1, d2; try reflexivity; try assumption.
+    - destruct d1, d2; try reflexivity; try assumption;
+      simpl in *.
+      + destruct H0.
+        rewrite unfold_lub2. simpl. split.
+        apply compatible_glb2; try assumption.
+        apply compatible_lub2; try assumption.
+      + destruct H.
+        rewrite unfold_lub2. simpl. split.
+        apply compatible_glb2; try assumption.
+        apply compatible_lub2; try assumption.
+      + destruct H0, H.
+        rewrite unfold_lub2. simpl. split.
+        apply compatible_glb2; try assumption.
+        apply compatible_lub2; try assumption.
+    --
+    induction t; intros.
+    - destruct d1, d2; try reflexivity; try assumption.
+    - destruct d1, d2; try reflexivity; try assumption.
+    - destruct d1, d2; try reflexivity; try assumption.
+      simpl in *.
+      + destruct H0.
+        rewrite unfold_glb2. simpl. split.
+        apply compatible_lub2; try assumption.
+        apply compatible_glb2; try assumption.
+      + destruct H.
+        rewrite unfold_glb2. simpl. split.
+        apply compatible_lub2; try assumption.
+        apply compatible_glb2; try assumption.
+      + destruct H0, H.
+        rewrite unfold_glb2. simpl. split.
+        apply compatible_lub2; try assumption.
+        apply compatible_glb2; try assumption.
+  Qed.
 
   Lemma compatible_lub : forall d1 d2 d3 t,
     compatible d1 TBool ->
@@ -483,24 +722,439 @@ Section LeastUpperBound.
     compatible (lub d1 d2 d3) t.
   Proof.
     intros d1 d2 d3 t Hc1 Hc2 Hc3.
-    unfold lub. unfold lub2.
-    destruct (more_specific d1 d2) eqn:H1.
-    - destruct (more_specific d2 d3) eqn:H2.
-      + assumption.
-      + destruct (more_specific d3 d2) eqn:H3.
-        * assumption.
-        * reflexivity.
-    - destruct (more_specific d2 d1) eqn:H4.
-      + destruct (more_specific d1 d3) eqn:H5.
-        * assumption.
-        * destruct (more_specific d3 d1) eqn:H6.
-          -- destruct d1; inversion Hc1.
-             ++  destruct t; try reflexivity.
-                 destruct d2; inversion Hc2;
-                 inversion H4.
-             ++ reflexivity.
-          -- reflexivity.
-      + simpl. destruct d3; auto; reflexivity.
+    unfold lub.
+    destruct d1 eqn:H1.
+    - apply compatible_lub2; assumption.
+    - reflexivity.
+    - reflexivity.
+  Qed.
+
+  Fixpoint contains_any (d : DType) : Prop :=
+    match d with
+    | Det => False
+    | Any => True
+    | Arrow d1 d2 => contains_any d1 \/ contains_any d2
+    end.
+
+  Lemma more_specific_contains_any_l : forall d,
+    more_specific d Det = false ->
+    contains_any d
+    with more_specific_contains_any_r : forall d,
+    more_specific Det d = false ->
+    contains_any d.
+  Proof.
+    --
+    induction d; intro.
+    - inversion H.
+    - reflexivity.
+    - simpl.
+      rewrite unfold_more_specific in H.
+      rewrite andb_false_iff in H. destruct H.
+      + left. apply more_specific_contains_any_r. assumption.
+      + right. apply more_specific_contains_any_l. assumption.
+    --
+    induction d; intro.
+    - inversion H.
+    - reflexivity.
+    - simpl.
+      rewrite unfold_more_specific in H.
+      rewrite andb_false_iff in H. destruct H.
+      + left. apply more_specific_contains_any_l. assumption.
+      + right. apply more_specific_contains_any_r. assumption.
+  Qed.
+
+  Lemma more_specific_lub_glb_pair : forall d1 d2,
+    more_specific d1 (lub2 d1 d2) = true /\
+    more_specific d2 (lub2 d1 d2) = true /\
+    more_specific (glb2 d1 d2) d1 = true /\
+    more_specific (glb2 d1 d2) d2 = true.
+  Proof.
+    intros d1 d2.
+    refine (
+    well_founded_induction
+      lt_wf
+      (fun n =>
+       forall d1 d2,
+         sizeD d1 + sizeD d2 = n ->
+         more_specific d1 (lub2 d1 d2) = true /\
+         more_specific d2 (lub2 d1 d2) = true /\
+         more_specific (glb2 d1 d2) d1 = true /\
+         more_specific (glb2 d1 d2) d2 = true)
+      _
+      (sizeD d1 + sizeD d2) d1 d2 eq_refl
+    ).
+    intros n IH d_1 d_2 Hsz. subst n.
+    destruct d_1 as [| | a b]; destruct d_2 as [| | c d]; simpl;
+    try (repeat split; reflexivity).
+
+    - (* d1 = Det, d2 = Arrow c d *)
+      pose proof (IH (sizeD Det + sizeD c) ltac:(simpl; lia)
+                    Det c eq_refl) as Hc.
+      pose proof (IH (sizeD Det + sizeD d) ltac:(simpl; lia)
+                    Det d eq_refl) as Hd.
+      destruct Hc as [Hc1 [Hc2 [Hc3 Hc4]]].
+      destruct Hd as [Hd1 [Hd2 [Hd3 Hd4]]].
+      repeat split.
+      + rewrite unfold_lub2, unfold_more_specific. simpl.
+        apply andb_true_iff. split; assumption.
+      + rewrite unfold_lub2, unfold_more_specific. simpl.
+        apply andb_true_iff. split; assumption.
+      + rewrite unfold_glb2, unfold_more_specific. simpl.
+        apply andb_true_iff. split; assumption.
+      + rewrite unfold_glb2, unfold_more_specific. simpl.
+        apply andb_true_iff. split; assumption.
+
+    - (* d1 = Any, d2 = Arrow c d *)
+      pose proof (IH (sizeD Any + sizeD c) ltac:(simpl; lia)
+                    Any c eq_refl) as Hc.
+      pose proof (IH (sizeD Any + sizeD d) ltac:(simpl; lia)
+                    Any d eq_refl) as Hd.
+      destruct Hc as [Hc1 [Hc2 [Hc3 Hc4]]].
+      destruct Hd as [Hd1 [Hd2 [Hd3 Hd4]]].
+      repeat split.
+      + rewrite unfold_glb2, unfold_more_specific. simpl.
+        apply andb_true_iff. split; apply more_specific_refl.
+
+    - (* d1 = Arrow a b, d2 = Det *)
+      pose proof (IH (sizeD a + sizeD Det) ltac:(simpl; lia)
+                    a Det eq_refl) as Ha.
+      pose proof (IH (sizeD b + sizeD Det) ltac:(simpl; lia)
+                    b Det eq_refl) as Hb.
+      destruct Ha as [Ha1 [Ha2 [Ha3 Ha4]]].
+      destruct Hb as [Hb1 [Hb2 [Hb3 Hb4]]].
+      repeat split.
+      + rewrite unfold_lub2, unfold_more_specific. simpl.
+        apply andb_true_iff. split; assumption.
+      + rewrite unfold_lub2, unfold_more_specific. simpl.
+        apply andb_true_iff. split; assumption.
+      + rewrite unfold_glb2, unfold_more_specific. simpl.
+        apply andb_true_iff. split; assumption.
+      + rewrite unfold_glb2, unfold_more_specific. simpl.
+        apply andb_true_iff. split; assumption.
+
+    - (* d1 = Arrow a b, d2 = Any *)
+      repeat split.
+      + rewrite unfold_glb2, unfold_more_specific. simpl.
+        apply andb_true_iff. split; apply more_specific_refl.
+
+    - (* d1 = Arrow a b, d2 = Arrow c d *)
+      pose proof (IH (sizeD a + sizeD c) ltac:(simpl; lia)
+                    a c eq_refl) as Ha.
+      pose proof (IH (sizeD b + sizeD d) ltac:(simpl; lia)
+                    b d eq_refl) as Hb.
+      destruct Ha as [Ha1 [Ha2 [Ha3 Ha4]]].
+      destruct Hb as [Hb1 [Hb2 [Hb3 Hb4]]].
+      repeat split.
+      + rewrite unfold_lub2, unfold_more_specific. simpl.
+        apply andb_true_iff. split; assumption.
+      + rewrite unfold_lub2, unfold_more_specific. simpl.
+        apply andb_true_iff. split; assumption.
+      + rewrite unfold_glb2, unfold_more_specific. simpl.
+        apply andb_true_iff. split; assumption.
+      + rewrite unfold_glb2, unfold_more_specific. simpl.
+        apply andb_true_iff. split; assumption.
+  Qed.
+
+  Lemma more_specific_lub2_l : forall d1 d2,
+    more_specific d1 (lub2 d1 d2) = true.
+  Proof.
+    intros d1 d2.
+    destruct (more_specific_lub_glb_pair d1 d2) as [H1 [H2 [H3 H4]]].
+    assumption.
+  Qed.
+
+  Lemma more_specific_lub2_r : forall d1 d2,
+    more_specific d2 (lub2 d1 d2) = true.
+  Proof.
+    intros d1 d2.
+    destruct (more_specific_lub_glb_pair d1 d2) as [H1 [H2 [H3 H4]]].
+    assumption.
+  Qed.
+
+  Lemma more_specific_glb2_l : forall d1 d2,
+    more_specific (glb2 d1 d2) d1 = true.
+  Proof.
+    intros d1 d2.
+    destruct (more_specific_lub_glb_pair d1 d2) as [H1 [H2 [H3 H4]]].
+    assumption.
+  Qed.
+
+  Lemma more_specific_glb2_r : forall d1 d2,
+    more_specific (glb2 d1 d2) d2 = true.
+  Proof.
+    intros d1 d2.
+    destruct (more_specific_lub_glb_pair d1 d2) as [H1 [H2 [H3 H4]]].
+    assumption.
+  Qed.
+
+  Lemma more_specific_lub_l : forall d1 d2 d3,
+    more_specific d2 (lub d1 d2 d3) = true.
+  Proof.
+    intros. unfold lub.
+    destruct d1 eqn:H1; try apply more_specific_Any.
+    apply more_specific_lub2_l.
+  Qed.
+
+  Lemma more_specific_lub_r : forall d1 d2 d3,
+    more_specific d3 (lub d1 d2 d3) = true.
+  Proof.
+    intros. unfold lub.
+    destruct d1 eqn:H1; try apply more_specific_Any.
+    apply more_specific_lub2_r.
+  Qed.
+
+  Lemma more_specific_lub2_general : forall u d1 d2,
+    ( more_specific d1 u = true ->
+      more_specific d2 u = true ->
+      more_specific (lub2 d1 d2) u = true) /\
+    ( more_specific u d1 = true ->
+      more_specific u d2 = true ->
+      more_specific u (glb2 d1 d2) = true).
+  Proof.
+    intros u d1 d2.
+    refine (
+    well_founded_induction
+      lt_wf
+      (fun n =>
+        forall u d1 d2,
+          sizeD d1 + sizeD d2 = n ->
+            ( more_specific d1 u = true ->
+              more_specific d2 u = true ->
+              more_specific (lub2 d1 d2) u = true) /\
+            ( more_specific u d1 = true ->
+              more_specific u d2 = true ->
+              more_specific u (glb2 d1 d2) = true))
+      _
+      (sizeD d1 + sizeD d2) u d1 d2 eq_refl
+    ).
+    intros n IH o d_1 d_2 Hsz. subst n.
+    destruct d_1 as [| | a b]; destruct d_2 as [| | c d]; simpl;
+    try (repeat split; reflexivity).
+
+    - (* d1 = Det, d2 = Det *)
+      repeat split; intros H1 H2;
+      try rewrite unfold_lub2; try rewrite glb; assumption.
+
+    - (* d1 = Det, d2 = Any *)
+      repeat split; intros H1 H2;
+      try rewrite unfold_lub2; try rewrite glb; assumption.
+
+    - (* d1 = Det, d2 = Arrow c d *)
+      pose proof (IH (sizeD Det + sizeD c) ltac:(simpl; lia)
+                    o Det c eq_refl) as Hc.
+      pose proof (IH (sizeD Det + sizeD d) ltac:(simpl; lia)
+                    o Det d eq_refl) as Hd.
+      destruct Hc as [Hc_l Hc_r].
+      destruct Hd as [Hd_l Hd_r].
+      repeat split; intros H1 H2.
+      + destruct o.
+        * rewrite unfold_more_specific in H2.
+          rewrite andb_true_iff in H2. destruct H2.
+          rewrite unfold_lub2, unfold_more_specific.
+          apply andb_true_iff. split.
+          -- apply Hc_r; try assumption.
+          -- apply Hd_l; try assumption.
+        * apply more_specific_Any.
+        * rewrite unfold_more_specific in H2.
+          rewrite andb_true_iff in H2. destruct H2.
+          rewrite unfold_more_specific in H1.
+          rewrite andb_true_iff in H1. destruct H1.
+          pose proof (IH (sizeD Det + sizeD c) ltac:(simpl; lia)
+                        o1 Det c eq_refl) as Hc'.
+          pose proof (IH (sizeD Det + sizeD d) ltac:(simpl; lia)
+                        o2 Det d eq_refl) as Hd'.
+          destruct Hc' as [Hc_l' Hc_r'].
+          destruct Hd' as [Hd_l' Hd_r'].
+          rewrite unfold_lub2, unfold_more_specific.
+          apply andb_true_iff. split.
+          -- apply Hc_r'; assumption.
+          -- apply Hd_l'; assumption.
+      + destruct o.
+        * rewrite unfold_more_specific in H2.
+          rewrite andb_true_iff in H2. destruct H2.
+          rewrite unfold_glb2, unfold_more_specific.
+          apply andb_true_iff. split.
+          -- apply Hc_l; try assumption.
+          -- apply Hd_r; try assumption.
+        * inversion H1.
+        * rewrite unfold_more_specific in H1.
+          rewrite andb_true_iff in H1. destruct H1.
+          rewrite unfold_more_specific in H2.
+          rewrite andb_true_iff in H2. destruct H2.
+          pose proof (IH (sizeD Det + sizeD c) ltac:(simpl; lia)
+                        o1 Det c eq_refl) as Hc'.
+          pose proof (IH (sizeD Det + sizeD d) ltac:(simpl; lia)
+                        o2 Det d eq_refl) as Hd'.
+          destruct Hc' as [Hc_l' Hc_r'].
+          destruct Hd' as [Hd_l' Hd_r'].
+          rewrite unfold_glb2, unfold_more_specific.
+          apply andb_true_iff. split.
+            -- apply Hc_l'; assumption.
+            -- apply Hd_r'; assumption.
+
+    - (* d1 = Any, d2 = Det *)
+      repeat split; intros H1 H2;
+      try rewrite unfold_lub2; try rewrite unfold_glb2; assumption.
+
+    - (* d1 = Any, d2 = Any *)
+      repeat split; intros H1 H2;
+      try rewrite unfold_lub2; try rewrite unfold_glb2; assumption.
+
+    - (* d1 = Any, d2 = Arrow c d *)
+      pose proof (IH (sizeD Any + sizeD c) ltac:(simpl; lia)
+                    o Any c eq_refl) as Hc.
+      pose proof (IH (sizeD Any + sizeD d) ltac:(simpl; lia)
+                    o Any d eq_refl) as Hd.
+      destruct Hc as [Hc_l Hc_r].
+      destruct Hd as [Hd_l Hd_r].
+      repeat split; intros H1 H2.
+      + destruct o.
+        * inversion H1.
+        * apply more_specific_Any.
+        * inversion H1.
+      + destruct o.
+        * rewrite unfold_more_specific in H2.
+          rewrite andb_true_iff in H2. destruct H2.
+          rewrite unfold_glb2, unfold_more_specific.
+          apply andb_true_iff. split; assumption.
+        * inversion H2.
+        * rewrite unfold_more_specific in H2.
+          rewrite andb_true_iff in H2. destruct H2.
+          rewrite unfold_glb2, unfold_more_specific.
+          apply andb_true_iff. split; assumption.
+
+    - (* d1 = Arrow a b, d2 = Det *)
+      pose proof (IH (sizeD a + sizeD Det) ltac:(simpl; lia)
+                    o a Det eq_refl) as Hc.
+      pose proof (IH (sizeD b + sizeD Det) ltac:(simpl; lia)
+                    o b Det eq_refl) as Hd.
+      destruct Hc as [Hc_l Hc_r].
+      destruct Hd as [Hd_l Hd_r].
+      repeat split; intros H1 H2.
+      + destruct o.
+        * rewrite unfold_more_specific in H1.
+          rewrite andb_true_iff in H1. destruct H1.
+          rewrite unfold_lub2, unfold_more_specific. simpl.
+          apply andb_true_iff. split.
+          -- apply Hc_r; assumption.
+          -- apply Hd_l; assumption.
+        * apply more_specific_Any.
+        * rewrite unfold_more_specific in H1.
+          rewrite andb_true_iff in H1. destruct H1.
+          rewrite unfold_more_specific in H2.
+          rewrite andb_true_iff in H2. destruct H2.
+          pose proof (IH (sizeD a + sizeD Det) ltac:(simpl; lia)
+                        o1 a Det eq_refl) as Hc'.
+          pose proof (IH (sizeD b + sizeD Det) ltac:(simpl; lia)
+                        o2 b Det eq_refl) as Hd'.
+          destruct Hc' as [Hc_l' Hc_r'].
+          destruct Hd' as [Hd_l' Hd_r'].
+          rewrite unfold_lub2, unfold_more_specific. simpl.
+          apply andb_true_iff. split.
+          -- apply Hc_r'; assumption.
+          -- apply Hd_l'; assumption.
+      + destruct o.
+        * rewrite unfold_more_specific in H1.
+          rewrite andb_true_iff in H1. destruct H1.
+          rewrite unfold_glb2, unfold_more_specific. simpl.
+          apply andb_true_iff. split.
+          -- apply Hc_l; assumption.
+          -- apply Hd_r; assumption.
+        * inversion H2.
+        * rewrite unfold_more_specific in H1.
+          rewrite andb_true_iff in H1. destruct H1.
+          rewrite unfold_more_specific in H2.
+          rewrite andb_true_iff in H2. destruct H2.
+          pose proof (IH (sizeD a + sizeD Det) ltac:(simpl; lia)
+                        o1 a Det eq_refl) as Hc'.
+          pose proof (IH (sizeD b + sizeD Det) ltac:(simpl; lia)
+                        o2 b Det eq_refl) as Hd'.
+          destruct Hc' as [Hc_l' Hc_r'].
+          destruct Hd' as [Hd_l' Hd_r'].
+          rewrite unfold_glb2, unfold_more_specific. simpl.
+          apply andb_true_iff. split.
+          -- apply Hc_l'; assumption.
+          -- apply Hd_r'; assumption.
+
+    - (* d1 = Arrow a b, d2 = Any *)
+      pose proof (IH (sizeD a + sizeD Any) ltac:(simpl; lia)
+                    o a Any eq_refl) as Hc.
+      pose proof (IH (sizeD b + sizeD Any) ltac:(simpl; lia)
+                    o b Any eq_refl) as Hd.
+      destruct Hc as [Hc_l Hc_r].
+      destruct Hd as [Hd_l Hd_r].
+      repeat split; intros H1 H2.
+      + destruct o.
+        * inversion H2.
+        * apply more_specific_Any.
+        * inversion H2.
+      + destruct o.
+        * rewrite unfold_more_specific in H1.
+          rewrite andb_true_iff in H1. destruct H1.
+          rewrite unfold_glb2, unfold_more_specific. simpl.
+          apply andb_true_iff. split; assumption.
+        * inversion H1.
+        * rewrite unfold_more_specific in H1.
+          rewrite andb_true_iff in H1. destruct H1.
+          rewrite unfold_glb2, unfold_more_specific. simpl.
+          apply andb_true_iff. split; assumption.
+
+    - (* d1 = Arrow a b, d2 = Arrow c d *)
+      pose proof (IH (sizeD a + sizeD c) ltac:(simpl; lia)
+                    o a c eq_refl) as Hc.
+      pose proof (IH (sizeD b + sizeD d) ltac:(simpl; lia)
+                    o b d eq_refl) as Hd.
+      destruct Hc as [Hc_l Hc_r].
+      destruct Hd as [Hd_l Hd_r].
+      repeat split; intros H1 H2.
+      + destruct o.
+        * rewrite unfold_more_specific in H1.
+          rewrite andb_true_iff in H1. destruct H1.
+          rewrite unfold_more_specific in H2.
+          rewrite andb_true_iff in H2. destruct H2.
+          rewrite unfold_lub2, unfold_more_specific. simpl.
+          apply andb_true_iff. split.
+          -- apply Hc_r; assumption.
+          -- apply Hd_l; assumption.
+        * apply more_specific_Any.
+        * rewrite unfold_more_specific in H1.
+          rewrite andb_true_iff in H1. destruct H1.
+          rewrite unfold_more_specific in H2.
+          rewrite andb_true_iff in H2. destruct H2.
+          pose proof (IH (sizeD a + sizeD c) ltac:(simpl; lia)
+                        o1 a c eq_refl) as Hc'.
+          pose proof (IH (sizeD b + sizeD d) ltac:(simpl; lia)
+                        o2 b d eq_refl) as Hd'.
+          destruct Hc' as [Hc_l' Hc_r'].
+          destruct Hd' as [Hd_l' Hd_r'].
+          rewrite unfold_lub2, unfold_more_specific. simpl.
+          apply andb_true_iff. split.
+          -- apply Hc_r'; assumption.
+          -- apply Hd_l'; assumption.
+      + destruct o.
+        * rewrite unfold_more_specific in H1.
+          rewrite andb_true_iff in H1. destruct H1.
+          rewrite unfold_more_specific in H2.
+          rewrite andb_true_iff in H2. destruct H2.
+          rewrite unfold_glb2, unfold_more_specific. simpl.
+          apply andb_true_iff. split.
+          -- apply Hc_l; assumption.
+          -- apply Hd_r; assumption.
+        * inversion H2.
+        * rewrite unfold_more_specific in H1.
+          rewrite andb_true_iff in H1. destruct H1.
+          rewrite unfold_more_specific in H2.
+          rewrite andb_true_iff in H2. destruct H2.
+          pose proof (IH (sizeD a + sizeD c) ltac:(simpl; lia)
+                        o1 a c eq_refl) as Hc'.
+          pose proof (IH (sizeD b + sizeD d) ltac:(simpl; lia)
+                        o2 b d eq_refl) as Hd'.
+          destruct Hc' as [Hc_l' Hc_r'].
+          destruct Hd' as [Hd_l' Hd_r'].
+          rewrite unfold_glb2, unfold_more_specific. simpl.
+          apply andb_true_iff. split.
+          -- apply Hc_l'; assumption.
+          -- apply Hd_r'; assumption.
   Qed.
 
   Lemma more_specific_lub: forall x1 x2 x3 d1 d2 d3,
@@ -512,105 +1166,26 @@ Section LeastUpperBound.
   Proof.
     assert
       (forall d1 d2 x1 x2,
-      compatible d1 TBool ->
       more_specific d1 x1 = true ->
       more_specific d2 x2 = true ->
       more_specific (lub2 d1 d2) (lub2 x1 x2) = true)
-      as more_specific_lub2.
+      as more_specific_lub_small.
     --
-    intros d1 d2 x1 x2 C1 H1 H2.
-    unfold lub2. destruct (more_specific d1 d2) eqn:H3.
-    - destruct (more_specific x1 x2) eqn:H4.
-      + assumption.
-      + destruct (more_specific x2 x1) eqn:H5.
-        * eapply more_specific_transitive.
-          apply H2. apply H5.
-        * apply more_specific_Any.
-    - destruct (more_specific d2 d1) eqn:H5.
-      + destruct (more_specific x1 x2) eqn:H6.
-        * eapply more_specific_transitive.
-          apply H1. apply H6.
-        * destruct (more_specific x2 x1) eqn:H7.
-          ++ assumption.
-          ++ apply more_specific_Any.
-      + destruct (more_specific x1 x2) eqn:H6.
-        * destruct d1, d2, x1, x2;
-          try discriminate;
-          try reflexivity.
-          inversion C1.
-        * destruct (more_specific x2 x1) eqn:H7.
-          ++  destruct d1, d2, x1, x2;
-              try discriminate;
-              try reflexivity.
-              inversion C1.
-          ++ reflexivity.
+    intros d1 d2 x1 x2 H0 H1.
+    destruct (more_specific_lub_glb_pair x1 x2)
+      as [Hlub_l [Hlub_r [Hglb_l Hglb_r]]].
+    specialize (more_specific_transitive d1 x1 (lub2 x1 x2) H0 Hlub_l)
+      as HA.
+    specialize (more_specific_transitive d2 x2 (lub2 x1 x2) H1 Hlub_r)
+      as HB.
+    apply more_specific_lub2_general; assumption.
     --
     intros x1 x2 x3 d1 d2 d3 C1 H1 H2 H3.
     unfold lub.
-    apply more_specific_lub2; try assumption.
-    - destruct x1, x2; try discriminate;
-      try reflexivity.
-      inversion C1.
-    - apply more_specific_lub2; try assumption.
-  Qed.
-
-  Lemma more_specific_lub1 : forall x d1 d2 d3,
-    more_specific x d1 = true ->
-    more_specific x (lub d1 d2 d3) = true.
-  Proof.
-    intros. unfold lub, lub2.
-    destruct (more_specific d1 d2) eqn:H1.
-    - destruct (more_specific d2 d3) eqn:H2.
-      + eapply more_specific_transitive; eauto.
-        eapply more_specific_transitive; eauto.
-      + destruct (more_specific d3 d2) eqn:H3.
-        * eapply more_specific_transitive; eauto.
-        * apply more_specific_Any.
-    - destruct (more_specific d2 d1) eqn:H4.
-      + destruct (more_specific d1 d3) eqn:H5.
-        * eapply more_specific_transitive; eauto.
-        * destruct (more_specific d3 d1) eqn:H6.
-          -- assumption.
-          -- apply more_specific_Any.
-      + simpl. destruct d3; simpl; apply more_specific_Any.
-  Qed.
-
-  Lemma more_specific_lub2 : forall d1 d2 d3,
-    more_specific d2 (lub d1 d2 d3) = true.
-  Proof.
-    intros. unfold lub, lub2.
-    destruct (more_specific d1 d2) eqn:H1.
-    - destruct (more_specific d2 d3) eqn:H2.
-      + assumption.
-      + destruct (more_specific d3 d2) eqn:H3.
-        * apply more_specific_refl.
-        * apply more_specific_Any.
-    - destruct (more_specific d2 d1) eqn:H4.
-      + destruct (more_specific d1 d3) eqn:H5.
-        * eapply more_specific_transitive; eassumption.
-        * destruct (more_specific d3 d1) eqn:H6.
-          -- assumption.
-          -- apply more_specific_Any.
-      + simpl. destruct d3; simpl; apply more_specific_Any.
-  Qed.
-
-  Lemma more_specific_lub3 : forall d1 d2 d3,
-    more_specific d3 (lub d1 d2 d3) = true.
-  Proof.
-    intros. unfold lub, lub2.
-    destruct (more_specific d1 d2) eqn:H1.
-    - destruct (more_specific d2 d3) eqn:H2.
-      + apply more_specific_refl.
-      + destruct (more_specific d3 d2) eqn:H3.
-        * assumption.
-        * apply more_specific_Any.
-    - destruct (more_specific d2 d1) eqn:H4.
-      + destruct (more_specific d1 d3) eqn:H5.
-        * apply more_specific_refl.
-        * destruct (more_specific d3 d1) eqn:H6.
-          -- assumption.
-          -- apply more_specific_Any.
-      + simpl. destruct d3; reflexivity.
+    destruct x1, d1; try reflexivity.
+    - eapply more_specific_lub_small; eassumption.
+    - inversion H1.
+    - inversion C1.
   Qed.
 
 End LeastUpperBound.
@@ -632,18 +1207,19 @@ Section DetTyping.
           Gamma |- BFalse :? Det
     | Rule_Nil : forall Gamma t,
           Gamma |- Nil t :? Det
-    | Rule_Cons : forall Gamma e1 e2 d1 d2 d3,
+    | Rule_Cons : forall Gamma e1 e2 d1 d2,
           Gamma |- e1 :? d1 ->
           Gamma |- e2 :? d2 ->
-          d3 = match d1, d2 with
-              | Det, Det => Det
-              | _, _ => Any
-              end ->
+          let d3 := if more_specific d1 Det && more_specific d2 Det then Det else Any in
           Gamma |- Cons e1 e2 :? d3
     | Rule_AppAny : forall Gamma e1 e2 d,
           Gamma |- e1 :? Any ->
           Gamma |- e2 :? d ->
           Gamma |- App e1 e2 :? Any
+    | Rule_AppDet : forall Gamma e1 e2 d,
+          Gamma |- e1 :? Det ->
+          Gamma |- e2 :? d ->
+          Gamma |- App e1 e2 :? decide Det d Det
     | Rule_AppFun : forall Gamma e1 e2 d1 d2 d3 d4,
           Gamma |- e1 :? Arrow d1 d2 ->
           Gamma |- e2 :? d3 ->
@@ -677,6 +1253,7 @@ Section DetTyping.
           let Gamma'' := update Nat.eqb Gamma' n2 d2 in
           Gamma'' |- e3 :? d_3 ->
           let p := Pat n1 t1 n2 H in
+          more_specific d_1 d1 = true -> (* not needed for d_2, d2*)
           Gamma |- CaseL e1 e2 p e3 :? lub d_1 d_2 d_3
     where "Gamma '|-' e ':?' delta" := (hasDType Gamma e delta).
 
@@ -973,47 +1550,6 @@ Section Examples.
   Example exAllValues : GammaAV |- App (Var 1) (Var 2) :? Any.
   Proof.
       eapply Rule_AppAny; apply Rule_Var; reflexivity.
-  Qed.
-
-  Example exAllValuesNotD : not (GammaAV |- App (Var 1) (Var 2) :? Det).
-  Proof.
-      unfold not. intros.
-      inversion H. inversion H2. inversion H4. subst.
-      unfold GammaAV in *. unfold mkCompatibleCtx in *.
-      unfold RhoAV in *. unfold RhoAV' in *. simpl in *.
-      inversion H9.
-  Qed.
-
-  (*
-  The AppAny rule is required to type the following example.
-  1 -> not :? Det -> Det
-  2 -> id :? Det -> Det
-  (not ? id) :? Any
-  (not ? id) True :? Any
-  *)
-  Definition RhoC' := update Nat.eqb (fun _ => TBool) 1 (TArrow TBool TBool).
-  Definition RhoC  := update Nat.eqb RhoC' 2 (TArrow TBool TBool).
-  Definition GammaC := mkCompatibleCtx RhoC.
-  Example exChoice2 : GammaC |- App (Or (Var 1) (Var 2)) BFalse :? Any.
-  Proof. eapply Rule_AppAny; eauto. Qed.
-
-  Lemma exChoice2_must_use_AppAny :
-  forall b d,
-    GammaC |- App (Or (Var 1) (Var 2)) b :? d ->
-    d = Any /\
-    (forall d1 d2,
-      ~ (GammaC |- Or (Var 1) (Var 2) :? d1 /\ GammaC |- b :? d2 /\
-         exists d3 d4 d5,
-           GammaC |- Or (Var 1) (Var 2) :? Arrow d3 d4 /\
-           GammaC |- b :? d5 /\
-           d = decide d3 d5 d4)).
-  Proof.
-    intros b d H.
-    inversion H; subst.
-    - split; auto.
-      intros d3 d4 [H1 [H2 [d5 [d6 [d7 [H4 [H6 H7]]]]]]].
-      inversion H4.
-    - inversion H2.
   Qed.
 
   (* (Det -> Det -> Det) <=
@@ -1650,9 +2186,15 @@ Section Proofs.
     - inversion H1. inversion H0. reflexivity.
     - inversion H1. inversion H0. reflexivity.
     - inversion H1. subst. destruct_typeOf_chain H0.
-      destruct d1, d2; auto; reflexivity.
+      destruct d1, d2; try reflexivity; subst d3.
+      + destruct (more_specific Det Det && more_specific (Arrow d2_1 d2_2) Det); reflexivity.
+      + destruct (more_specific (Arrow d1_1 d1_2) Det && more_specific Det Det); reflexivity.
+      + destruct (more_specific (Arrow d1_1 d1_2) Det && more_specific Any Det); reflexivity.
+      + destruct (more_specific (Arrow d1_1 d1_2) Det && more_specific (Arrow d2_1 d2_2) Det); reflexivity.
     - inversion H1; subst.
       + reflexivity.
+      + unfold decide.
+        destruct (more_specific d0 Det); reflexivity.
       + destruct_typeOf_chain H0.
         unfold decide in H1. unfold decide.
         destruct (more_specific d3 d1).
@@ -1728,12 +2270,13 @@ Section Proofs.
                (IHe2 Rho Gamma _ HG Heq1), H1.
       eexists. split.
       eapply Rule_Cons; try eassumption; try reflexivity.
-      destruct x, x0; reflexivity.
+      destruct (more_specific x Det && more_specific x0 Det); reflexivity.
     * destruct_typeOf_chain HW.
       destruct (IHe1 Rho Gamma (TArrow t1_1 t0) HG Heq1), H,
                (IHe2 Rho Gamma t1_1 HG Heq2), H1, x.
-      - eapply compatibility with (t:= TArrow _ _) in H.
-        inversion H. eassumption. apply Heq1.
+      - exists (decide Det x0 Det). split. apply Rule_AppDet.
+        apply H. apply H1. unfold decide.
+        destruct (more_specific x0 Det) eqn:Heq4; reflexivity.
       - exists Any. split. eapply Rule_AppAny.
         apply H. apply H1. reflexivity.
       - eexists. split. eapply Rule_AppFun.
@@ -1776,6 +2319,7 @@ Section Proofs.
       exists (lub x x0 x1). split.
       eapply Rule_CaseList with (d1 := Any);
       try eassumption. reflexivity.
+      apply more_specific_Any.
       apply compatible_lub; try assumption.
       destruct x; inversion H0; reflexivity.
       rewrite double_update_indep; trivial.
@@ -1805,8 +2349,7 @@ Section Proofs.
       apply anyIn_cons in H0. destruct H0 as [HH1 HH2].
       apply anyIn_concat2 in HH1. destruct HH1 as [HH3 HH4].
       apply anyIn_concat2 in HH2. destruct HH2 as [HH5 HH6].
-      destruct d0 eqn:HeqD0, d3 eqn:HeqD3;
-      eapply Rule_Cons with (d1 := d0) (d2 := d3); subst;
+      subst d4. eapply Rule_Cons;
       try apply (IHe1 Gamma _ _ n); try eassumption;
       try apply (IHe2 Gamma _ _ n); try eassumption;
       try reflexivity.
@@ -1815,6 +2358,8 @@ Section Proofs.
       inversion H; subst; simpl in *.
       + eapply IHe1 in H3; eauto. eapply IHe2 in H5; eauto.
         eapply Rule_AppAny; eauto.
+      + eapply IHe1 in H3; eauto. eapply IHe2 in H5; eauto.
+        eapply Rule_AppDet; eauto.
       + eapply IHe1 in H2; eauto. eapply IHe2 in H4; eauto.
         eapply Rule_AppFun; eauto.
     - inversion H. subst. simpl in *.
@@ -1854,7 +2399,7 @@ Section Proofs.
       apply anyIn_concat2 in HH2.
       destruct HH2 as [HH3 HH4].
       eapply Rule_CaseList.
-      apply IHe1; assumption. apply H8. apply H10.
+      apply IHe1; assumption. apply H7. apply H9.
       apply IHe2; assumption.
       destruct (n =? n2) eqn:HeqN2,
                (n =? n1) eqn:HeqN1.
@@ -1881,6 +2426,7 @@ Section Proofs.
         subst Gamma'. subst Gamma''.
         apply anyIn_removeb in HH4; auto.
         apply anyIn_removeb in HH4; auto.
+      + assumption.
   Qed.
 
   (* Lemma subst_lemma:
@@ -1923,14 +2469,22 @@ Section Proofs.
       apply anyIn_cons in H. destruct H as [HH1 HH2].
       apply anyIn_concat1 in HH1. destruct HH1 as [HH3 HH4].
       apply well_typed_subterms in H0. destruct H0 as [H0_1 H0_2].
-      edestruct IHe1_1 in H9; try eassumption.
+      edestruct IHe1_1 in H10; try eassumption.
       apply anyIn_cons. split; eassumption.
-      edestruct IHe1_2 in H11; try eassumption.
+      edestruct IHe1_2 in H12; try eassumption.
       apply anyIn_cons. split; eassumption.
       destruct H, H0. eexists. split.
-      shelve. eapply Rule_Cons; eauto. Unshelve.
-      destruct x, x0, d0, d4; try inversion H;
-      try inversion H0; try rewrite H12; try reflexivity.
+      shelve. eapply Rule_Cons; eauto.
+      Unshelve. subst d5.
+      destruct (more_specific x Det) eqn:Heq1, (more_specific x0 Det) eqn:Heq2,
+               (more_specific d0 Det) eqn:Heq3, (more_specific d4 Det) eqn:Heq4;
+      try reflexivity; try apply more_specific_Any; simpl.
+      + rewrite (more_specific_transitive x0 d4 Det) in Heq2;
+        try assumption. inversion Heq2.
+      + rewrite (more_specific_transitive x d0 Det) in Heq1;
+        try assumption. inversion Heq1.
+      + rewrite (more_specific_transitive x0 d4 Det) in Heq2;
+        try assumption. inversion Heq2.
     - apply anyIn_cons in H. destruct H as [HH1 HH2].
       apply anyIn_subterm in HH1. destruct HH1 as [HH3 HH4].
       destruct_typeOf_chain H0.
@@ -1942,15 +2496,45 @@ Section Proofs.
         try split; try eassumption.
         unfold well_typed. rewrite Heq2. reflexivity.
         destruct H, H7, x; simpl.
-        * eapply (subst_preservation Rho) in Heq1.
-          eapply (compatibility _ _ _ _ _ H3 Heq1) in H8. inversion H8.
-          apply anyIn_cons. split; assumption.
-          assumption.
+        * eexists. split. apply more_specific_Any.
+          eapply Rule_AppDet. apply H8. apply H10.
         * eexists. split. apply more_specific_Any.
           eapply Rule_AppAny. apply H8. apply H10.
         * eexists. split. apply more_specific_Any.
           eapply Rule_AppFun. apply H8. apply H10.
           reflexivity.
+      + edestruct IHe1_1 in H6; try apply anyIn_cons;
+        try split; try eassumption.
+        unfold well_typed. rewrite Heq1. reflexivity.
+        edestruct IHe1_2 in H6; try apply anyIn_cons;
+        try split; try eassumption.
+        unfold well_typed. rewrite Heq2. reflexivity.
+        destruct H, H7, x.
+        * exists (decide Det x0 Det). split.
+          unfold decide.
+          destruct (more_specific d  Det) eqn:Heq4,
+                   (more_specific x0 Det) eqn:Heq5.
+          --  reflexivity.
+          --  eapply more_specific_transitive
+                with (d2:=d) (d3 := Det) in H7.
+              rewrite H7 in Heq5. inversion Heq5.
+              assumption.
+          --  apply more_specific_Any.
+          -- reflexivity.
+          -- eapply Rule_AppDet; eassumption.
+        * inversion H.
+        * eexists (decide x1 x0 x2). split.
+          unfold decide. rewrite unfold_more_specific in H.
+          rewrite andb_true_iff in H. destruct H.
+          destruct (more_specific x0 x1) eqn:Heq4,
+                   (more_specific d Det) eqn:Heq5.
+          --  assumption.
+          --  reflexivity.
+          --  apply (more_specific_transitive x0 d Det) in Heq5; try assumption.
+              rewrite (more_specific_transitive x0 Det x1) in Heq4; try assumption.
+              inversion Heq4.
+          --  reflexivity.
+          --  eapply Rule_AppFun. apply H8. apply H10. reflexivity.
       + edestruct IHe1_1 in H5;
         try apply anyIn_cons;
         try split; try eassumption.
@@ -1958,15 +2542,26 @@ Section Proofs.
         edestruct IHe1_2 in H8; try apply anyIn_cons; try split; try eassumption.
         unfold well_typed. rewrite Heq2. reflexivity.
         destruct H, H7, x; simpl.
-        * inversion H.
+        * eexists. split. shelve.
+          eapply Rule_AppDet; eassumption.
+          Unshelve. unfold decide.
+          rewrite unfold_more_specific in H.
+          rewrite andb_true_iff in H. destruct H.
+          destruct (more_specific x0 Det) eqn:Heq4,
+                   (more_specific d5 d0) eqn:Heq5.
+          --  assumption.
+          --  reflexivity.
+          --  apply (more_specific_transitive x0 d5 d0) in Heq5; try assumption.
+              rewrite (more_specific_transitive x0 d0 Det) in Heq4; try assumption.
+              inversion Heq4.
+          --  reflexivity.
         * inversion H.
         * eexists. split. shelve.
           eapply Rule_AppFun. apply H9. apply H11. reflexivity.
-          Unshelve. simpl in H. apply andb_true_iff in H.
+          Unshelve. rewrite unfold_more_specific in H. apply andb_true_iff in H.
           destruct H. unfold decide.
           destruct (more_specific d5 d0) eqn:Heq4;
           try apply more_specific_Any.
-          rewrite less_specific_more_specific in H.
           eapply (more_specific_transitive d5 d0 x1) in Heq4.
           eapply (more_specific_transitive x0 d5 x1) in Heq4.
           rewrite Heq4. assumption. assumption. assumption.
@@ -1979,7 +2574,9 @@ Section Proofs.
         eexists. simpl. rewrite Nat.eqb_refl.
         split. shelve. eapply Rule_Abs. apply H12.
         subst Gamma'. rewrite double_update in H13. apply H13.
-        Unshelve. simpl. rewrite less_specific_refl. rewrite more_specific_refl. reflexivity.
+        Unshelve. rewrite unfold_more_specific.
+        rewrite more_specific_refl.
+        rewrite more_specific_refl. reflexivity.
       + apply Nat.eqb_neq in Heq. subst Gamma'.
         rewrite double_update_indep in H0; try assumption.
         rewrite double_update_indep in H13; try assumption.
@@ -1991,7 +2588,8 @@ Section Proofs.
         destruct H. eexists. split. shelve. simpl.
         apply Nat.eqb_neq in Heq. rewrite Nat.eqb_sym in Heq.
         rewrite Heq. eapply Rule_Abs; eassumption. Unshelve.
-        simpl. rewrite less_specific_refl.
+        rewrite unfold_more_specific.
+        rewrite more_specific_refl.
         rewrite H. reflexivity.
     - inversion H2. subst.
       apply well_typed_subterms in H0. destruct H0 as [H0_1 H0_2].
@@ -2039,15 +2637,14 @@ Section Proofs.
       apply anyIn_cons. split; eassumption.
       destruct H, H0, H7.
       exists (lub x x0 x1). split.
-      * apply more_specific_lub; try assumption.
-        destruct_typeOf_chain HC.
+      * destruct_typeOf_chain HC.
+        apply more_specific_lub; try assumption.
         remember Heq1 as Heq1C. clear HeqHeq1C.
-        eapply compatibility in Heq1. shelve.
-        shelve. apply H11. Unshelve.
-        -- eapply subst_preservation in H1; try eassumption.
-           eapply compatibility in H1; eassumption.
-           apply anyIn_cons. split; assumption.
-        -- apply update_compatible; assumption.
+        specialize (update_compatible _ _ n0 _ _ H3 H4) as Hupd.
+        eapply (compatibility _ _ _ _ _ Hupd Heq1) in H11.
+        eapply (subst_preservation _ e1_1 e2 n0 TBool) in H1.
+        eapply compatibility with (d := x) in H1; eassumption.
+        apply anyIn_cons. split; assumption. assumption.
       * simpl. apply Rule_CaseBool; assumption.
     - inversion H2. subst.
       remember H0 as HC. clear HeqHC.
@@ -2094,6 +2691,7 @@ Section Proofs.
             try reflexivity; try inversion H8.
         --  simpl. eapply Rule_CaseList; try eassumption.
             rewrite double_update_indep; try eassumption.
+            eapply more_specific_transitive; eassumption.
       + rewrite Nat.eqb_neq in HeqN1.
         rewrite Nat.eqb_eq in HeqN2. subst n2.
         subst Gamma'. subst Gamma''. subst Gamma'0.
@@ -2116,6 +2714,7 @@ Section Proofs.
             try reflexivity; try inversion H8.
         --  eapply Rule_CaseList; try eassumption.
             rewrite double_update_indep; try eassumption.
+            eapply more_specific_transitive; eassumption.
       + rewrite Nat.eqb_neq in HeqN1.
         rewrite Nat.eqb_neq in HeqN2.
         rewrite (double_update_indep _ n0 _ n2 _ HeqN2) in Heq3.
@@ -2144,7 +2743,8 @@ Section Proofs.
           eapply subst_preservation; eauto.
           apply anyIn_cons. split; assumption.
           apply update_compatible; eassumption.
-        * simpl. eapply Rule_CaseList; eassumption.
+        * simpl. eapply Rule_CaseList; try eassumption.
+          eapply more_specific_transitive; eassumption.
   Qed.
 
   (* Lemma subst_lemma2:
@@ -2234,20 +2834,32 @@ Section Proofs.
         eapply compatibility; eassumption.
         destruct H2, H3.
         eexists. split. shelve. split. shelve.
-        eapply Rule_Cons; eauto. Unshelve.
-        destruct d1, d2, x; try reflexivity;
-        try inversion H8; try inversion H2.
-        destruct x, d2; reflexivity.
+        eapply Rule_Cons; eauto. Unshelve. subst d3.
+        - destruct (more_specific x  Det) eqn:Heq4,
+                   (more_specific d2 Det) eqn:Heq5,
+                   (more_specific d1 Det) eqn:Heq6;
+          try reflexivity; try apply more_specific_Any; simpl.
+          rewrite (more_specific_transitive x d1 Det) in Heq4; try assumption.
+          inversion Heq4.
+        - destruct (more_specific x  Det) eqn:Heq4,
+                   (more_specific d2 Det) eqn:Heq5;
+          reflexivity.
       + destruct (step e2) eqn:Heq4; inversion H5.
         subst. edestruct IHe2. try eassumption.
         apply Single_Step. apply Heq4. eassumption.
         eapply compatibility; eassumption.
         assumption. destruct H2, H3.
         eexists. split. shelve. split. shelve.
-        eapply Rule_Cons; eauto. Unshelve.
-        destruct d1, d2, x; try reflexivity;
-        try inversion H8; try inversion H2.
-        destruct x, d1; reflexivity.
+        eapply Rule_Cons; eauto. Unshelve. subst d3.
+        - destruct (more_specific x  Det) eqn:Heq5,
+                   (more_specific d2 Det) eqn:Heq6,
+                   (more_specific d1 Det) eqn:Heq7;
+          try reflexivity; try apply more_specific_Any; simpl.
+          rewrite (more_specific_transitive x d2 Det) in Heq5; try assumption.
+          inversion Heq5.
+        - destruct (more_specific x  Det) eqn:Heq5,
+                   (more_specific d1 Det) eqn:Heq6;
+          reflexivity.
     * remember H1 as H1C. clear HeqH1C.
       destruct_typeOf_chain HW.
       destruct e1 eqn:Heq5; inversion H5; subst.
@@ -2259,38 +2871,74 @@ Section Proofs.
         - edestruct IHe1 with (d := Any).
           eassumption.
           apply Single_Step. apply Heq. eassumption.
-          eapply (compatibility (App e3 e4)); eauto.
-          assumption. destruct H2, H4, x.
-          --  inversion H4.
+          reflexivity. assumption. destruct H2, H4, x.
+          --  exists (decide Det d Det). split. apply more_specific_Any.
+              split. unfold decide.
+              destruct (more_specific d Det); reflexivity.
+              apply Rule_AppDet; assumption.
           --  exists Any; intuition.
               eapply Rule_AppAny; eassumption.
           --  eexists (decide x1 d x2); intuition.
               unfold decide. destruct (more_specific d x1).
               destruct H4. assumption. reflexivity.
               eapply Rule_AppFun; eauto.
+        - edestruct IHe1 with (d := Det); eauto.
+          reflexivity. destruct H2, H4, x.
+          --  exists (decide Det d Det). split. apply more_specific_refl.
+              split. unfold decide. destruct (more_specific d Det); reflexivity.
+              eapply Rule_AppDet; eassumption.
+          --  exists Any; auto with *.
+          --  rewrite unfold_more_specific in H2.
+              apply andb_true_iff in H2. destruct H2.
+              destruct H4.
+              eexists (decide x1 d x2). split. shelve. split. shelve.
+              eapply Rule_AppFun. apply H6. apply H10.
+              reflexivity. Unshelve. unfold decide in *.
+              destruct (more_specific d x1) eqn:Heq4,
+                       (more_specific d Det) eqn:Heq5.
+              ++  assumption.
+              ++  apply more_specific_Any.
+              ++  rewrite (more_specific_transitive d Det x1) in Heq4;
+                  try assumption. inversion Heq4.
+              ++  reflexivity.
+              ++  unfold decide.
+                  destruct (more_specific d x1) eqn:Heq4.
+                  assumption. reflexivity.
         - edestruct IHe1 with (d := (Arrow d1 d2)); eauto.
           eapply (compatibility (App e3 e4)); eauto.
           destruct H2, H4, x.
-          --  inversion H4.
+          --  rewrite unfold_more_specific in H2.
+              apply andb_true_iff in H2. destruct H2.
+              eexists (decide Det d3 Det). split.
+              unfold decide.
+              destruct (more_specific d3 Det) eqn:Heq4,
+                       (more_specific d3 d1) eqn:Heq5;
+              try reflexivity; try apply more_specific_Any.
+              assumption.
+              rewrite (more_specific_transitive d3 d1 Det) in Heq4;
+              try assumption. inversion Heq4.
+              split. unfold decide.
+              destruct (more_specific d3 Det); reflexivity.
+              eapply Rule_AppDet; eassumption.
           --  inversion H2.
-          --  simpl in H2. apply (andb_true_iff) in H2.
+          --  rewrite unfold_more_specific in H2.
+              apply (andb_true_iff) in H2.
               destruct H2, H4.
-              unfold decide. destruct (more_specific d3 d1) eqn:Heq4.
-              ++  exists x2. split. assumption. split.
-                  assumption. eapply Rule_AppFun.
-                  eassumption. eassumption. unfold decide.
-                  erewrite more_specific_transitive.
-                  reflexivity. eassumption.
-                  rewrite more_specific_less_specific.
-                  assumption.
-              ++  exists (decide x1 d3 x2); intuition.
-                  unfold decide. destruct (more_specific d3 x1); eauto.
-                  eapply Rule_AppFun; eauto.
+              eexists (decide x1 d3 x2). split.
+              unfold decide.
+              destruct (more_specific d3 x1) eqn:Heq4,
+                       (more_specific d3 d1) eqn:Heq5;
+              try apply more_specific_Any; try assumption.
+              rewrite (more_specific_transitive d3 d1 x1) in Heq4; try assumption.
+              inversion Heq4. split. unfold decide.
+              destruct (more_specific d3 x1). assumption. reflexivity.
+              eapply Rule_AppFun; eauto.
       (* App Abs *)
       + destruct_typeOf_chain Heq1.
         destruct (anyIn (freeVars e2) (n :: boundVars e)) eqn:Heq7;
         try discriminate. inversion H5. subst.
         inversion H0.
+        - inversion H7.
         - inversion H7.
         - inversion H6; subst. unfold decide in *.
           destruct (more_specific d3 d1) eqn:Heq5.
@@ -2307,21 +2955,24 @@ Section Proofs.
       (* App Or *)
       + destruct d0.
         - inversion H0; inversion H4.
-        - inversion H0; try inversion H4.
-          exists Any. split. apply more_specific_Any.
-          split. reflexivity. inversion H5. subst.
-          destruct_typeOf_chain Heq1.
-          eapply (step_preservation (App (Or e3 e4) e2)
-                                    (Or (App e3 e2) (App e4 e2))) in H1C.
-          edestruct (completeness (App e3 e2)). eassumption.
-          simpl. rewrite Heq0, Heq2, eqType_refl. reflexivity.
-          edestruct (completeness (App e4 e2)). eassumption.
-          simpl. rewrite Heq4, Heq2, eqType_refl. reflexivity.
-          destruct H2, H3.
-          eapply Rule_Choice; eassumption.
-          simpl. rewrite Heq0, Heq2, Heq4, eqTypeS_refl, eqType_refl.
-          reflexivity.
-        - inversion H0; inversion H4.
+          rewrite H6 in H7. inversion H7.
+        - inversion H0.
+          --  exists Any. split. apply more_specific_Any.
+              split. reflexivity. inversion H5. subst.
+              destruct_typeOf_chain Heq1.
+              eapply (step_preservation (App (Or e3 e4) e2)
+                                        (Or (App e3 e2) (App e4 e2))) in H1C.
+              edestruct (completeness (App e3 e2)). eassumption.
+              simpl. rewrite Heq0, Heq2, eqType_refl. reflexivity.
+              edestruct (completeness (App e4 e2)). eassumption.
+              simpl. rewrite Heq4, Heq2, eqType_refl. reflexivity.
+              destruct H2, H3.
+              eapply Rule_Choice; eassumption.
+              simpl. rewrite Heq0, Heq2, Heq4, eqTypeS_refl, eqType_refl.
+              reflexivity.
+          -- inversion H7.
+          -- inversion H4.
+        - inversion H0; inversion H4. inversion H7.
       (* App Free *)
       + destruct t, (step (Free n (FO t f) e)) eqn:Heq;
         inversion H5; subst. inversion H0; subst.
@@ -2329,7 +2980,10 @@ Section Proofs.
           apply Heq. rewrite Heq1. reflexivity.
           eapply compatibility; eassumption. apply H7.
           destruct H2, H4, x.
-          --  inversion H4.
+          --  exists (decide Det d Det). split.
+              apply more_specific_Any. split. unfold decide.
+              destruct (more_specific d Det); reflexivity.
+              eapply Rule_AppDet; eassumption.
           --  exists Any; intuition.
               eapply Rule_AppAny; eassumption.
           --  exists (decide x1 d x2). split.
@@ -2341,18 +2995,49 @@ Section Proofs.
           rewrite Heq1. reflexivity. eapply compatibility.
           eassumption. apply Heq1. eassumption. assumption.
           destruct H2, H4, x.
-          --  inversion H4.
+          --  exists (decide Det d Det). split.
+              apply more_specific_refl. split.
+              unfold decide. destruct (more_specific d Det); reflexivity.
+              eapply Rule_AppDet; eassumption.
           --  inversion H2.
-          --  simpl in H2. apply (andb_true_iff) in H2.
+          --  rewrite unfold_more_specific in H2.
+              apply (andb_true_iff) in H2.
               destruct H2, H4.
-              rewrite <- more_specific_less_specific in H2.
-              exists (decide x1 d3 x2). split. unfold decide.
-              destruct (more_specific d3 x1) eqn:M1,
-                       (more_specific d3 d1) eqn:M2;
+              eexists (decide x1 d x2). split. unfold decide.
+              destruct (more_specific d x1) eqn:M1,
+                       (more_specific d Det) eqn:M2;
               try assumption; try apply more_specific_Any.
-              apply more_specific_transitive
-                with (d1:=d3) (d2:=d1) (d3:=x1) in M2.
-              rewrite M1 in M2. inversion M2. assumption.
+              rewrite (more_specific_transitive d Det x1) in M1;
+              try assumption. inversion M1.
+              split. unfold decide. destruct (more_specific d x1).
+              assumption. reflexivity.
+              eapply Rule_AppFun; try eassumption. reflexivity.
+        - edestruct IHe1. eassumption. apply Single_Step. apply Heq.
+          rewrite Heq1. reflexivity. eapply compatibility.
+          eassumption. apply Heq1. eassumption. assumption.
+          destruct H2, H4, x.
+          --  rewrite unfold_more_specific in H2.
+              apply andb_true_iff in H2. destruct H2.
+              eexists (decide Det d3 Det). split.
+              unfold decide.
+              destruct (more_specific d3 Det) eqn:Heq4,
+                       (more_specific d3 d1)  eqn:Heq5;
+              try reflexivity; try apply more_specific_Any.
+              assumption.
+              rewrite (more_specific_transitive d3 d1 Det) in Heq4;
+              try assumption. inversion Heq4. split. unfold decide.
+              destruct (more_specific d3 Det); reflexivity.
+              eapply Rule_AppDet; eassumption.
+          --  inversion H2.
+          --  rewrite unfold_more_specific in H2.
+              apply (andb_true_iff) in H2.
+              destruct H2, H4.
+              eexists (decide x1 d3 x2). split. unfold decide.
+              destruct (more_specific d3 d1) eqn:M1,
+                       (more_specific d3 x1) eqn:M2;
+              try assumption; try apply more_specific_Any.
+              rewrite (more_specific_transitive d3 d1 x1) in M2;
+              try assumption. inversion M2.
               split. unfold decide. destruct (more_specific d3 x1).
               assumption. reflexivity.
               eapply Rule_AppFun; try eassumption. reflexivity.
@@ -2362,7 +3047,11 @@ Section Proofs.
         - edestruct IHe1. eassumption. apply Single_Step. apply Heq.
           rewrite Heq1. reflexivity. eapply compatibility; eauto.
           eassumption. destruct H2, H2, H4, x.
-          --  inversion H2.
+          --  exists (decide Det d Det).
+              rewrite more_specific_Any, more_specific_Any.
+              split. reflexivity. split. unfold decide.
+              destruct (more_specific d Det); reflexivity.
+              eapply Rule_AppDet; eassumption.
           --  exists Any; intuition.
               eapply Rule_AppAny; eassumption.
           --  exists (decide x1 d x2). split.
@@ -2374,20 +3063,47 @@ Section Proofs.
           apply Heq. rewrite Heq1. reflexivity. eapply compatibility.
           eassumption. apply Heq1. eassumption. assumption.
           destruct H2, H4, x.
-          --  inversion H4.
+          --  exists (decide Det d Det). split. apply more_specific_refl.
+              split. unfold decide. destruct (more_specific d Det);
+              reflexivity. eapply Rule_AppDet; eassumption.
           --  inversion H2.
-          --  simpl in H2. apply (andb_true_iff) in H2.
+          --  rewrite unfold_more_specific in H2.
+              apply (andb_true_iff) in H2.
               destruct H2, H4.
-              rewrite <- more_specific_less_specific in H2.
-              exists (decide x1 d3 x2). split. unfold decide.
-              destruct (more_specific d3 x1) eqn:M1,
-                       (more_specific d3 d1) eqn:M2;
+              exists (decide x1 d x2). split. unfold decide.
+              destruct (more_specific d x1) eqn:M1,
+                       (more_specific d Det) eqn:M2;
               try assumption; try apply more_specific_Any.
-              apply more_specific_transitive
-                with (d1:=d3) (d2:=d1) (d3:=x1) in M2.
-              rewrite M1 in M2. inversion M2. assumption.
-              split. unfold decide. destruct (more_specific d3 x1).
-              assumption. reflexivity.
+              rewrite (more_specific_transitive d Det x1) in M1;
+              try assumption. inversion M1. split.
+              unfold decide. destruct (more_specific d x1); trivial.
+              eapply Rule_AppFun; try eassumption. reflexivity.
+        - edestruct IHe1. eassumption. apply Single_Step.
+          apply Heq. rewrite Heq1. reflexivity. eapply compatibility.
+          eassumption. apply Heq1. eassumption. assumption.
+          destruct H2, H4, x.
+          --  rewrite unfold_more_specific in H2.
+              apply andb_true_iff in H2. destruct H2.
+              exists (decide Det d3 Det).
+              split. unfold decide.
+              destruct (more_specific d3 Det) eqn:Heq4,
+                       (more_specific d3 d1)  eqn:Heq5;
+              try reflexivity. assumption.
+              rewrite (more_specific_transitive d3 d1 Det) in Heq4;
+              try assumption. inversion Heq4. split. unfold decide.
+              destruct (more_specific d3 Det); reflexivity.
+              eapply Rule_AppDet; eassumption.
+          --  inversion H2.
+          --  rewrite unfold_more_specific in H2.
+              apply (andb_true_iff) in H2.
+              destruct H2, H4.
+              exists (decide x1 d3 x2). split. unfold decide.
+              destruct (more_specific d3 d1) eqn:M1,
+                       (more_specific d3 x1) eqn:M2;
+              try assumption; try apply more_specific_Any.
+              rewrite (more_specific_transitive d3 d1 x1) in M2;
+              try assumption. inversion M2. split.
+              unfold decide. destruct (more_specific d3 x1); trivial.
               eapply Rule_AppFun; try eassumption. reflexivity.
       + destruct (step (CaseL e3 e4 p e5)) eqn:Heq;
         inversion H5; subst; inversion H0; subst.
@@ -2395,7 +3111,9 @@ Section Proofs.
           rewrite Heq1. reflexivity. eapply compatibility.
           eassumption. apply Heq1. eassumption. assumption.
           destruct H2, H4, x.
-          --  inversion H4.
+          --  exists (decide Det d Det). split. apply more_specific_Any.
+              split. unfold decide. destruct (more_specific d Det);
+              reflexivity. eapply Rule_AppDet; eassumption.
           --  exists Any. split. apply more_specific_Any.
               split. reflexivity.
               eapply Rule_AppAny; eassumption.
@@ -2407,20 +3125,48 @@ Section Proofs.
           apply Heq. rewrite Heq1. reflexivity. eapply compatibility.
           eassumption. apply Heq1. eassumption. assumption.
           destruct H2, H4, x.
-          --  inversion H4.
+          --  exists (decide Det d Det). split. apply more_specific_refl.
+              split. unfold decide. destruct (more_specific d Det);
+              reflexivity. eapply Rule_AppDet; eassumption.
           --  inversion H2.
-          --  simpl in H2. apply (andb_true_iff) in H2.
+          --  rewrite unfold_more_specific in H2.
+              apply (andb_true_iff) in H2.
               destruct H2, H4.
-              rewrite <- more_specific_less_specific in H2.
-              exists (decide x1 d3 x2). split. unfold decide.
-              destruct (more_specific d3 x1) eqn:M1,
-                       (more_specific d3 d1) eqn:M2;
+              exists (decide x1 d x2). split. unfold decide.
+              destruct (more_specific d x1) eqn:M1,
+                       (more_specific d Det) eqn:M2;
               try assumption; try apply more_specific_Any.
-              apply more_specific_transitive
-                with (d1:=d3) (d2:=d1) (d3:=x1) in M2.
-              rewrite M1 in M2. inversion M2. assumption.
-              split. unfold decide. destruct (more_specific d3 x1).
-              assumption. reflexivity.
+              rewrite more_specific_transitive
+                with (d1:=d) (d2:=Det) (d3:=x1) in M1;
+              try assumption. inversion M1. split. unfold decide.
+              destruct (more_specific d x1). assumption. reflexivity.
+              eapply Rule_AppFun; try eassumption. reflexivity.
+        - edestruct IHe1. eassumption. apply Single_Step.
+          apply Heq. rewrite Heq1. reflexivity. eapply compatibility.
+          eassumption. apply Heq1. eassumption. assumption.
+          destruct H2, H4, x.
+          --  rewrite unfold_more_specific in H2.
+              apply andb_true_iff in H2. destruct H2.
+              exists (decide Det d3 Det).
+              split. unfold decide.
+              destruct (more_specific d3 Det) eqn:Heq4,
+                       (more_specific d3 d1)  eqn:Heq5;
+              try reflexivity. assumption.
+              rewrite (more_specific_transitive d3 d1 Det) in Heq4;
+              try assumption. inversion Heq4. split. unfold decide.
+              destruct (more_specific d3 Det); reflexivity.
+              eapply Rule_AppDet; eassumption.
+          --  inversion H2.
+          --  rewrite unfold_more_specific in H2.
+              apply (andb_true_iff) in H2.
+              destruct H2, H4.
+              exists (decide x1 d3 x2). split. unfold decide.
+              destruct (more_specific d3 d1) eqn:M1,
+                       (more_specific d3 x1) eqn:M2;
+              try assumption; try apply more_specific_Any.
+              rewrite (more_specific_transitive d3 d1 x1) in M2;
+              try assumption. inversion M2. split. unfold decide.
+              destruct (more_specific d3 x1); trivial.
               eapply Rule_AppFun; try eassumption. reflexivity.
     (* Or *)
     * inversion H1. inversion H0. subst.
@@ -2465,10 +3211,10 @@ Section Proofs.
         split. apply compatible_lub; eauto.
         eapply Rule_CaseBool; eassumption.
       + destruct e1; inversion H5; subst.
-        ++  eexists. split. apply more_specific_lub3. split.
+        ++  eexists. split. apply more_specific_lub_r. split.
             eapply compatibility. apply HX. apply Heq3. eassumption.
             eassumption.
-        ++  eexists. split. apply more_specific_lub2. split.
+        ++  eexists. split. apply more_specific_lub_l. split.
             eapply compatibility. apply HX. apply Heq2. eassumption.
             eassumption.
         ++  inversion H8. subst. exists Any. split.
@@ -2499,11 +3245,12 @@ Section Proofs.
         eexists. split. apply more_specific_lub with (x1:=x); eauto.
         split. apply compatible_lub; eauto.
         eapply Rule_CaseList with (d1:=d1) (d2:=d2); try eassumption.
+        eapply more_specific_transitive; eassumption.
         rewrite double_update_indep; try eassumption.
         apply update_compatible; eauto.
         apply update_compatible; eauto.
       + destruct e1; inversion H5; subst.
-        ++  eexists. split. apply more_specific_lub2. split.
+        ++  eexists. split. apply more_specific_lub_l. split.
             eapply compatibility. apply HX. apply Heq2. eassumption.
             assumption.
         ++  destruct (anyIn (freeVars e1_1 ++ freeVars e1_2)
@@ -2515,43 +3262,49 @@ Section Proofs.
             apply anyIn_concat2 in Heq6. destruct Heq6.
             destruct_typeOf_chain Heq1.
             inversion H15. subst. subst Gamma'. subst Gamma''.
-            specialize (compatibility _ _ _ _ _ HX Heq9 H11) as H22.
-            specialize (compatibility _ _ _ _ _ HX Heq6 H14) as H23.
+            specialize (compatibility _ _ _ _ _ HX Heq9 H12) as H22.
+            specialize (compatibility _ _ _ _ _ HX Heq6 H21) as H23.
             specialize (compatibility _ _ _ _ _ HX Heq2 H18) as H24.
             rewrite double_update_indep in Heq3; intuition.
             specialize update_compatible as HX'.
-            eapply (compatibility _ _ _ _ _) in H19 as H20; eauto.
-            destruct (more_specific d3 d2) eqn:Heq11,
-                    (more_specific d0 d1) eqn:Heq12.
-            --- destruct (subst_lemma2 _ _ _ Rho Gamma (TList t1)
-                            t1 d_3 d2 d1 _ _ d3 d0 H7 H4); eauto.
-                unfold well_typed. rewrite Heq3. reflexivity.
-                destruct H12. exists x. split.
-                **  destruct d0, d3, d_2, d_3; eauto.
-                **  split. eapply compatibility. apply HX.
-                    eapply (subst_preservation2 _ _ _ _ _ _ _ _ _
-                              H7 H4); eauto.
+            eapply (compatibility _ _ _ _ _) in H19 as H25; eauto.
+            subst d4. subst.
+            destruct d3; try inversion H23.
+            **  unfold lub. rewrite (unfold_more_specific Det Det).
+                rewrite andb_true_r.
+                destruct (more_specific d0 Det) eqn:Heq11.
+                --- destruct (subst_lemma2 _ _ _ Rho Gamma (TList t1)
+                            t1 d_3 d2 d1 _ _ Det d0 H7 H4); eauto.
+                    unfold well_typed. rewrite Heq3. reflexivity.
+                    destruct d2; try inversion H17.
+                    reflexivity. reflexivity.
+                    rewrite (unfold_more_specific Det Det) in H20.
+                    simpl in H20.
+                    eapply more_specific_transitive; eauto.
+                    destruct H11. exists x. split.
+                    specialize (more_specific_lub2_r d_2 d_3) as HL.
+                    apply (more_specific_transitive x d_3 _ H11 HL).
+                    split. eapply compatibility. apply HX.
+                    eapply subst_preservation2.
+                    apply H7. apply H4. assumption. symmetry. assumption.
+                    rewrite Heq3. reflexivity. assumption. assumption.
                     assumption. assumption.
-            --- destruct t1, d0, d1; try inversion Heq12;
-                try inversion H16; try inversion H22;
-                edestruct completeness as [x HCO]; try apply HX;
-                try eapply (subst_preservation2 _ _ _ _ _ _ _ _ _
-                              H7 H4); eauto;
-                destruct HCO; exists x; destruct d_2, d_3; eauto.
-            --- destruct d3, d2; try inversion Heq11;
-                try inversion H23; try inversion H17.
+                --- edestruct completeness. apply HX.
+                    eapply subst_preservation2.
+                    apply H7. apply H4. assumption. symmetry. assumption.
+                    rewrite Heq3. reflexivity. assumption. assumption.
+                    destruct H11. exists x. split.
+                    apply more_specific_Any. split. assumption.
+                    assumption.
+            **  unfold lub. rewrite (unfold_more_specific Any Det).
+                rewrite andb_false_r.
                 edestruct completeness. apply HX.
                 eapply subst_preservation2.
                 apply H7. apply H4. assumption. symmetry. assumption.
                 rewrite Heq3. reflexivity. assumption. assumption.
-                destruct H12. exists x. destruct d0, d_2, d_3; eauto.
-            --- destruct d3, d2; try inversion Heq11;
-                try inversion H23; try inversion H17.
-                edestruct completeness. apply HX.
-                eapply subst_preservation2.
-                apply H7. apply H4. assumption. symmetry. assumption.
-                rewrite Heq3. reflexivity. assumption. assumption.
-                destruct H12. exists x. destruct d0, d_2, d_3; eauto.
+                destruct H11. exists x. split.
+                apply more_specific_Any. split. assumption.
+                assumption.
         ++  inversion H15. subst. exists Any. split.
             destruct d_2, d_3; reflexivity.
             split. reflexivity.
@@ -2566,7 +3319,9 @@ Section Proofs.
             eassumption. simpl.
             rewrite Heq2, Heq3, Heq6, eqTypeS_refl, eqTypeS_refl.
             reflexivity. destruct H7.
-            eapply Rule_Choice; eapply Rule_CaseList; eassumption.
+            eapply Rule_Choice; eapply Rule_CaseList; try eassumption;
+            destruct d1; try inversion H20;
+            try apply more_specific_Any.
   Qed.
 
   Theorem preservation_multi : forall e e' t,
@@ -2606,8 +3361,9 @@ Section Proofs.
   Proof.
     intros. destruct (preservation_multi e e' t H3
                           Rho Gamma Det H H0 H2 H1).
-    destruct H4, H5. apply more_specific_Det in H4.
-    subst. destruct e'; try reflexivity; try inversion H6.
+    destruct H4, H5.
+    destruct e'; try reflexivity; try inversion H6.
+    subst. inversion H4.
   Qed.
 
 End Proofs.

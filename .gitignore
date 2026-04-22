@@ -1,0 +1,12 @@
+
+*.vos
+
+*.vo
+
+*.vok
+
+*.glob
+
+*.cache
+
+*.aux
