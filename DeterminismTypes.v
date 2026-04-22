@@ -377,6 +377,8 @@ Section Subtyping.
     | Arrow d1 d2 => 1 + sizeD d1 + sizeD d2
     end.
 
+  Obligation Tactic := simpl; lia.
+
   Equations more_specific (d1 d2 : DType) : bool
     by wf (sizeD d1 + sizeD d2) lt :=
   more_specific _ Any := true;
@@ -388,13 +390,6 @@ Section Subtyping.
   more_specific (Arrow d1 d2) (Arrow d1' d2') :=
     andb (more_specific d1' d1) (more_specific d2 d2');
   more_specific _ _ := false.
-
-  Next Obligation. simpl. lia. Defined.
-  Next Obligation. simpl. lia. Defined.
-  Next Obligation. simpl. lia. Defined.
-  Next Obligation. simpl. lia. Defined.
-  Next Obligation. simpl. lia. Defined.
-  Next Obligation. simpl. lia. Defined.
 
   Lemma unfold_more_specific : forall d1 d2,
     more_specific d1 d2 = match d1, d2 with
@@ -455,18 +450,6 @@ Section Subtyping.
       rewrite IHd1. rewrite IHd2. reflexivity.
   Qed.
 
-  Lemma more_specific_less_specific : forall d1 d2,
-    more_specific d1 d2 = less_specific d2 d1.
-  Proof.
-    induction d1; intro d2; induction d2; simpl; trivial.
-  Qed.
-
-  Lemma less_specific_more_specific : forall d1 d2,
-    less_specific d1 d2 = more_specific d2 d1.
-  Proof.
-    induction d1; intro d2; induction d2; simpl; trivial.
-  Qed.
-
   Lemma more_specific_Det_l : forall d1 d2,
     more_specific d1 Det = true ->
     more_specific Det d2 = true ->
@@ -525,8 +508,6 @@ Section Subtyping.
         * rewrite unfold_more_specific in *.
           rewrite andb_true_iff in H0. destruct H0.
           rewrite andb_true_iff in H. destruct H.
-          rewrite more_specific_less_specific; try assumption.
-          rewrite less_specific_more_specific; try assumption.
           rewrite more_specific_Det_l; try assumption.
           rewrite more_specific_Det_r; try assumption.
           reflexivity.
@@ -555,16 +536,6 @@ Section Subtyping.
         reflexivity.
   Qed.
 
-  Lemma less_specific_transitive : forall d1 d2 d3,
-    less_specific d1 d2 = true ->
-    less_specific d2 d3 = true ->
-    less_specific d1 d3 = true.
-  Proof.
-    intros d1 d2 d3 H1 H2.
-    unfold less_specific in *.
-    apply more_specific_transitive with (d2 := d2); assumption.
-  Qed.
-
   Lemma more_specific_Any : forall d, more_specific d Any = true.
   Proof.
     - induction d; simpl; trivial.
@@ -573,6 +544,8 @@ Section Subtyping.
 End Subtyping.
 
 Section LeastUpperBound.
+
+  Obligation Tactic := simpl; lia.
 
   Equations lub_helper (b : bool) (d1 d2 : DType) : DType
     by wf (sizeD d1 + sizeD d2) lt :=
@@ -596,19 +569,6 @@ Section LeastUpperBound.
   lub_helper false Any (Arrow d2_1 d2_2) :=
     Arrow d2_1 d2_2;
   lub_helper false _ _ := Det.
-
-  Next Obligation. simpl. lia. Defined.
-  Next Obligation. simpl. lia. Defined.
-  Next Obligation. simpl. lia. Defined.
-  Next Obligation. simpl. lia. Defined.
-  Next Obligation. simpl. lia. Defined.
-  Next Obligation. simpl. lia. Defined.
-  Next Obligation. simpl. lia. Defined.
-  Next Obligation. simpl. lia. Defined.
-  Next Obligation. simpl. lia. Defined.
-  Next Obligation. simpl. lia. Defined.
-  Next Obligation. simpl. lia. Defined.
-  Next Obligation. simpl. lia. Defined.
 
   Definition lub2 (d1 d2 : DType) : DType :=
     lub_helper true d1 d2.
@@ -727,40 +687,6 @@ Section LeastUpperBound.
     - apply compatible_lub2; assumption.
     - reflexivity.
     - reflexivity.
-  Qed.
-
-  Fixpoint contains_any (d : DType) : Prop :=
-    match d with
-    | Det => False
-    | Any => True
-    | Arrow d1 d2 => contains_any d1 \/ contains_any d2
-    end.
-
-  Lemma more_specific_contains_any_l : forall d,
-    more_specific d Det = false ->
-    contains_any d
-    with more_specific_contains_any_r : forall d,
-    more_specific Det d = false ->
-    contains_any d.
-  Proof.
-    --
-    induction d; intro.
-    - inversion H.
-    - reflexivity.
-    - simpl.
-      rewrite unfold_more_specific in H.
-      rewrite andb_false_iff in H. destruct H.
-      + left. apply more_specific_contains_any_r. assumption.
-      + right. apply more_specific_contains_any_l. assumption.
-    --
-    induction d; intro.
-    - inversion H.
-    - reflexivity.
-    - simpl.
-      rewrite unfold_more_specific in H.
-      rewrite andb_false_iff in H. destruct H.
-      + left. apply more_specific_contains_any_l. assumption.
-      + right. apply more_specific_contains_any_r. assumption.
   Qed.
 
   Lemma more_specific_lub_glb_pair : forall d1 d2,
