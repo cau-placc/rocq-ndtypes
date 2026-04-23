@@ -628,6 +628,27 @@ Section LeastUpperBound.
     | _ => Any
     end.
 
+  Ltac simpl_more_specific H :=
+    rewrite unfold_more_specific in H; simpl in H.
+
+  Ltac simpl_lub H :=
+    try rewrite unfold_lub2 in H; simpl in H;
+    try rewrite unfold_glb2 in H; simpl in H.
+
+  Ltac destruct_h H :=
+  match type of H with
+  | context[_ /\ _] =>
+      let H1 := fresh "H" in
+      let H2 := fresh "H" in
+      destruct H as [H1 H2]
+  end.
+
+  Ltac simpl_all H :=
+    try simpl_lub H;
+    try simpl_more_specific H;
+    try rewrite andb_true_iff in H; simpl in H;
+    try destruct_h H.
+
   Lemma compatible_lub2 : forall t d1 d2,
     compatible d1 t ->
     compatible d2 t ->
@@ -874,8 +895,7 @@ Section LeastUpperBound.
       destruct Hd as [Hd_l Hd_r].
       repeat split; intros H1 H2.
       + destruct o.
-        * rewrite unfold_more_specific in H2.
-          rewrite andb_true_iff in H2. destruct H2.
+        * simpl_all H2.
           rewrite unfold_lub2, unfold_more_specific.
           apply andb_true_iff. split.
           -- apply Hc_r; try assumption.
@@ -893,20 +913,17 @@ Section LeastUpperBound.
           destruct Hd' as [Hd_l' Hd_r'].
           rewrite unfold_lub2, unfold_more_specific.
           apply andb_true_iff. split.
-          -- apply Hc_r'; assumption.
-          -- apply Hd_l'; assumption.
+          -- apply Hc_r'; try assumption.
+          -- apply Hd_l'; try assumption.
       + destruct o.
-        * rewrite unfold_more_specific in H2.
-          rewrite andb_true_iff in H2. destruct H2.
+        * simpl_all H2.
           rewrite unfold_glb2, unfold_more_specific.
           apply andb_true_iff. split.
           -- apply Hc_l; try assumption.
           -- apply Hd_r; try assumption.
         * inversion H1.
-        * rewrite unfold_more_specific in H1.
-          rewrite andb_true_iff in H1. destruct H1.
-          rewrite unfold_more_specific in H2.
-          rewrite andb_true_iff in H2. destruct H2.
+        * simpl_all H1.
+          simpl_all H2.
           pose proof (IH (sizeD Det + sizeD c) ltac:(simpl; lia)
                         o1 Det c eq_refl) as Hc'.
           pose proof (IH (sizeD Det + sizeD d) ltac:(simpl; lia)
@@ -939,13 +956,11 @@ Section LeastUpperBound.
         * apply more_specific_Any.
         * inversion H1.
       + destruct o.
-        * rewrite unfold_more_specific in H2.
-          rewrite andb_true_iff in H2. destruct H2.
+        * simpl_all H2.
           rewrite unfold_glb2, unfold_more_specific.
           apply andb_true_iff. split; assumption.
         * inversion H2.
-        * rewrite unfold_more_specific in H2.
-          rewrite andb_true_iff in H2. destruct H2.
+        * simpl_all H2.
           rewrite unfold_glb2, unfold_more_specific.
           apply andb_true_iff. split; assumption.
 
@@ -958,17 +973,14 @@ Section LeastUpperBound.
       destruct Hd as [Hd_l Hd_r].
       repeat split; intros H1 H2.
       + destruct o.
-        * rewrite unfold_more_specific in H1.
-          rewrite andb_true_iff in H1. destruct H1.
+        * simpl_all H1.
           rewrite unfold_lub2, unfold_more_specific. simpl.
           apply andb_true_iff. split.
           -- apply Hc_r; assumption.
           -- apply Hd_l; assumption.
         * apply more_specific_Any.
-        * rewrite unfold_more_specific in H1.
-          rewrite andb_true_iff in H1. destruct H1.
-          rewrite unfold_more_specific in H2.
-          rewrite andb_true_iff in H2. destruct H2.
+        * simpl_all H1.
+          simpl_all H2.
           pose proof (IH (sizeD a + sizeD Det) ltac:(simpl; lia)
                         o1 a Det eq_refl) as Hc'.
           pose proof (IH (sizeD b + sizeD Det) ltac:(simpl; lia)
@@ -980,17 +992,14 @@ Section LeastUpperBound.
           -- apply Hc_r'; assumption.
           -- apply Hd_l'; assumption.
       + destruct o.
-        * rewrite unfold_more_specific in H1.
-          rewrite andb_true_iff in H1. destruct H1.
+        * simpl_all H1.
           rewrite unfold_glb2, unfold_more_specific. simpl.
           apply andb_true_iff. split.
           -- apply Hc_l; assumption.
           -- apply Hd_r; assumption.
         * inversion H2.
-        * rewrite unfold_more_specific in H1.
-          rewrite andb_true_iff in H1. destruct H1.
-          rewrite unfold_more_specific in H2.
-          rewrite andb_true_iff in H2. destruct H2.
+        * simpl_all H1.
+          simpl_all H2.
           pose proof (IH (sizeD a + sizeD Det) ltac:(simpl; lia)
                         o1 a Det eq_refl) as Hc'.
           pose proof (IH (sizeD b + sizeD Det) ltac:(simpl; lia)
@@ -1015,13 +1024,11 @@ Section LeastUpperBound.
         * apply more_specific_Any.
         * inversion H2.
       + destruct o.
-        * rewrite unfold_more_specific in H1.
-          rewrite andb_true_iff in H1. destruct H1.
+        * simpl_all H1.
           rewrite unfold_glb2, unfold_more_specific. simpl.
           apply andb_true_iff. split; assumption.
         * inversion H1.
-        * rewrite unfold_more_specific in H1.
-          rewrite andb_true_iff in H1. destruct H1.
+        * simpl_all H1.
           rewrite unfold_glb2, unfold_more_specific. simpl.
           apply andb_true_iff. split; assumption.
 
@@ -1034,10 +1041,8 @@ Section LeastUpperBound.
       destruct Hd as [Hd_l Hd_r].
       repeat split; intros H1 H2.
       + destruct o.
-        * rewrite unfold_more_specific in H1.
-          rewrite andb_true_iff in H1. destruct H1.
-          rewrite unfold_more_specific in H2.
-          rewrite andb_true_iff in H2. destruct H2.
+        * simpl_all H1.
+          simpl_all H2.
           rewrite unfold_lub2, unfold_more_specific. simpl.
           apply andb_true_iff. split.
           -- apply Hc_r; assumption.
@@ -1058,19 +1063,15 @@ Section LeastUpperBound.
           -- apply Hc_r'; assumption.
           -- apply Hd_l'; assumption.
       + destruct o.
-        * rewrite unfold_more_specific in H1.
-          rewrite andb_true_iff in H1. destruct H1.
-          rewrite unfold_more_specific in H2.
-          rewrite andb_true_iff in H2. destruct H2.
+        * simpl_all H1.
+          simpl_all H2.
           rewrite unfold_glb2, unfold_more_specific. simpl.
           apply andb_true_iff. split.
           -- apply Hc_l; assumption.
           -- apply Hd_r; assumption.
         * inversion H2.
-        * rewrite unfold_more_specific in H1.
-          rewrite andb_true_iff in H1. destruct H1.
-          rewrite unfold_more_specific in H2.
-          rewrite andb_true_iff in H2. destruct H2.
+        * simpl_all H1.
+          simpl_all H2.
           pose proof (IH (sizeD a + sizeD c) ltac:(simpl; lia)
                         o1 a c eq_refl) as Hc'.
           pose proof (IH (sizeD b + sizeD d) ltac:(simpl; lia)
