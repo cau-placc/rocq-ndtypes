@@ -1,4 +1,6 @@
-NOTE: Formalization is now completely updated.
+# Rocq Formalization for "Determinism Types for Functional Logic Programming"
+
+**Looking for the version linked in my thesis? Go to the [adaptation_ts branch](https://github.com/cau-placc/rocq-ndtypes/tree/adaptation_ts).**
 
 You can check that this formalization corresponds to the paper.
 Just search in this document for the following important theorems and
