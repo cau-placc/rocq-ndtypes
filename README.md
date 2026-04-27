@@ -1,4 +1,4 @@
-NOTE: Formalization is now completely updated.
+# Rocq Formalization for my Thesis
 
 You can check that this formalization corresponds to the paper.
 Just search in this document for the following important theorems and

@@ -410,6 +410,19 @@ Section Subtyping.
     - rewrite more_specific_equation_7. reflexivity.
   Qed.
 
+  Lemma Det_is_like_Det_to_Det : forall d,
+    (more_specific d Det =
+    more_specific d (Arrow Det Det)) /\
+    (more_specific Det d =
+    more_specific (Arrow Det Det) d).
+  Proof.
+    destruct d; auto; split.
+    - rewrite (unfold_more_specific (Arrow d1 d2) (Arrow Det Det)).
+      rewrite unfold_more_specific. reflexivity.
+    - rewrite (unfold_more_specific (Arrow Det Det) (Arrow d1 d2)).
+      rewrite unfold_more_specific. reflexivity.
+  Qed.
+
   Definition less_specific (d1 d2 : DType) : bool :=
     more_specific d2 d1.
 
@@ -564,11 +577,9 @@ Section LeastUpperBound.
     Arrow (lub_helper true d1_1 d2_1) (lub_helper false d1_2 d2_2);
   lub_helper false Det (Arrow d2_1 d2_2) :=
     Arrow (lub_helper true Det d2_1) (lub_helper false Det d2_2);
-  lub_helper false (Arrow d1_1 d1_2) Any :=
-    Arrow d1_1 d1_2;
-  lub_helper false Any (Arrow d2_1 d2_2) :=
-    Arrow d2_1 d2_2;
-  lub_helper false _ _ := Det.
+  lub_helper false d1 Any := d1;
+  lub_helper false Any d2 := d2;
+  lub_helper false Det Det := Det.
 
   Definition lub2 (d1 d2 : DType) : DType :=
     lub_helper true d1 d2.
@@ -1176,6 +1187,7 @@ Section DetTyping.
           compatible d1 t1 ->
           compatible d2 (TList t1) ->
           Gamma |- e2 :? d_2 ->
+
           let Gamma'  := update Nat.eqb Gamma  n1 d1 in
           let Gamma'' := update Nat.eqb Gamma' n2 d2 in
           Gamma'' |- e3 :? d_3 ->
