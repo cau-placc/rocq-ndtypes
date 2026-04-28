@@ -47,10 +47,10 @@ Section Types.
     fun k' => if beq k k' then v else m k'.
 
   Lemma double_update_indep :
-    forall {V : Type} (Rho : nat -> V) n1 t1 n2 t2,
+    forall {V : Type} (Delta : nat -> V) n1 t1 n2 t2,
     n1 <> n2 ->
-    update Nat.eqb (update Nat.eqb Rho n1 t1) n2 t2 =
-    update Nat.eqb (update Nat.eqb Rho n2 t2) n1 t1.
+    update Nat.eqb (update Nat.eqb Delta n1 t1) n2 t2 =
+    update Nat.eqb (update Nat.eqb Delta n2 t2) n1 t1.
   Proof.
     intros. apply functional_extensionality.
     intro x. unfold update.
@@ -60,9 +60,9 @@ Section Types.
   Qed.
 
   Lemma double_update :
-    forall {V : Type} (Rho : nat -> V) n t1 t2,
-    update Nat.eqb (update Nat.eqb Rho n t1) n t2 =
-    update Nat.eqb Rho n t2.
+    forall {V : Type} (Delta : nat -> V) n t1 t2,
+    update Nat.eqb (update Nat.eqb Delta n t1) n t2 =
+    update Nat.eqb Delta n t2.
   Proof.
     intros. apply functional_extensionality.
     intro x. unfold update.
@@ -292,19 +292,19 @@ End Types.
     subst.
 
   Lemma well_typed_subterms :
-    forall Rho e,
-    well_typed Rho e ->
+    forall Delta e,
+    well_typed Delta e ->
     match e with
-    | Cons e1 e2 => well_typed Rho e1 /\ well_typed Rho e2
-    | App e1 e2 => well_typed Rho e1 /\ well_typed Rho e2
-    | Abs x t e1 => well_typed (update Nat.eqb Rho x t) e1
-    | Or e1 e2 => well_typed Rho e1 /\ well_typed Rho e2
-    | Free x (FO t _) e1 => well_typed (update Nat.eqb Rho x t) e1
-    | CaseB e1 e2 e3 => well_typed Rho e1 /\ well_typed Rho e2 /\ well_typed Rho e3
+    | Cons e1 e2 => well_typed Delta e1 /\ well_typed Delta e2
+    | App e1 e2 => well_typed Delta e1 /\ well_typed Delta e2
+    | Abs x t e1 => well_typed (update Nat.eqb Delta x t) e1
+    | Or e1 e2 => well_typed Delta e1 /\ well_typed Delta e2
+    | Free x (FO t _) e1 => well_typed (update Nat.eqb Delta x t) e1
+    | CaseB e1 e2 e3 => well_typed Delta e1 /\ well_typed Delta e2 /\ well_typed Delta e3
     | CaseL e1 e2 (Pat n1 t1 n2 _) e3 =>
-        well_typed Rho e1 /\
-        well_typed Rho e2 /\
-        well_typed (update Nat.eqb (update Nat.eqb Rho n1 t1) n2 (TList t1)) e3
+        well_typed Delta e1 /\
+        well_typed Delta e2 /\
+        well_typed (update Nat.eqb (update Nat.eqb Delta n1 t1) n2 (TList t1)) e3
     | _ => True
     end.
   Proof.
@@ -329,24 +329,24 @@ Section Context.
     fun n => mkCompatible (cT n).
 
   Lemma update_compatible :
-    forall Gamma Rho n t d,
-    compatibleCtx Gamma Rho ->
+    forall Gamma Delta n t d,
+    compatibleCtx Gamma Delta ->
     compatible d t ->
     compatibleCtx (update Nat.eqb Gamma n d)
-                  (update Nat.eqb Rho n t).
+                  (update Nat.eqb Delta n t).
   Proof.
     intros. unfold compatibleCtx. intro n0.
     unfold update. destruct (n =? n0) eqn:Heq; eauto.
   Qed.
 
   Lemma update_update_compatible :
-    forall Gamma Rho n1 n2 t1 d1 t2 d2,
-    compatibleCtx Gamma Rho ->
+    forall Gamma Delta n1 n2 t1 d1 t2 d2,
+    compatibleCtx Gamma Delta ->
     compatible d1 t1 ->
     compatible d2 t2 ->
     let Gamma' := update Nat.eqb Gamma n1 d1 in
     compatibleCtx (update Nat.eqb Gamma' n2 d2)
-                  (update Nat.eqb (update Nat.eqb Rho n1 t1) n2 t2).
+                  (update Nat.eqb (update Nat.eqb Delta n1 t1) n2 t2).
   Proof.
     intros. unfold compatibleCtx in *. intro n0.
     subst Gamma'. unfold update in *.
@@ -1644,12 +1644,12 @@ Section PreservationTTypesHelper.
   Qed.
 
   Lemma typeOf_unbound :
-    forall e Rho n t t2,
-    typeOf Rho e = Some t ->
+    forall e Delta n t t2,
+    typeOf Delta e = Some t ->
     anyIn (freeVars e) [n] = false ->
-    typeOf (update Nat.eqb Rho n t2) e = typeOf Rho e.
+    typeOf (update Nat.eqb Delta n t2) e = typeOf Delta e.
   Proof.
-    induction e; intros Rho n1 t1 t2 H H1; simpl in *.
+    induction e; intros Delta n1 t1 t2 H H1; simpl in *.
     - destruct (n =? n1) eqn:Heq; inversion H1.
       unfold update. rewrite Nat.eqb_sym in Heq. rewrite Heq.
       reflexivity.
@@ -1781,14 +1781,14 @@ End PreservationTTypesHelper.
 Section PreservationTTypes.
 
   Lemma subst_preservation :
-    forall Rho e1 e2 n t t2,
+    forall Delta e1 e2 n t t2,
     anyIn (freeVars e2) (n::boundVars e1) = false ->
-    typeOf (update Nat.eqb Rho n t2) e1 = Some t ->
-    typeOf Rho e2 = Some t2 ->
-    typeOf Rho (subst n e2 e1) = Some t.
+    typeOf (update Nat.eqb Delta n t2) e1 = Some t ->
+    typeOf Delta e2 = Some t2 ->
+    typeOf Delta (subst n e2 e1) = Some t.
   Proof.
-    intros Rho e1. generalize dependent Rho.
-    induction e1; intros Rho e2 n0 t1 t2 HF H H1.
+    intros Delta e1. generalize dependent Delta.
+    induction e1; intros Delta e2 n0 t1 t2 HF H H1.
     - simpl in H. inversion H. subst.
       unfold subst. unfold update.
       destruct (n =? n0) eqn:Heq.
@@ -1814,7 +1814,7 @@ Section PreservationTTypes.
       destruct_typeOf_chain H.
       apply anyIn_cons in HF. destruct HF as [HF HFA].
       apply anyIn_concat1 in HF. destruct HF as [HF1 HF2].
-      eapply (IHe1_1 Rho) in Heq1. eapply (IHe1_2 Rho) in Heq2.
+      eapply (IHe1_1 Delta) in Heq1. eapply (IHe1_2 Delta) in Heq2.
       rewrite Heq1. rewrite Heq2. rewrite Heq3.
       reflexivity. apply anyIn_cons. split;
       assumption. assumption. apply anyIn_cons.
@@ -1923,16 +1923,16 @@ Section PreservationTTypes.
   Qed.
 
   Lemma subst_preservation2 :
-    forall Rho e1 e2 n t n3 t3 e3 t2,
+    forall Delta e1 e2 n t n3 t3 e3 t2,
     anyIn (freeVars e2) (n3::n::boundVars e1) = false ->
     anyIn (freeVars e3) (n3::n::boundVars e1) = false ->
     anyIn (freeVars e2) (boundVars e3) = false ->
     n <> n3 ->
-    typeOf (update Nat.eqb (update Nat.eqb Rho n3 t3) n t2) e1
+    typeOf (update Nat.eqb (update Nat.eqb Delta n3 t3) n t2) e1
       = Some t ->
-    typeOf Rho e2 = Some t2 ->
-    typeOf Rho e3 = Some t3 ->
-    typeOf Rho (subst n e2 (subst n3 e3 e1)) = Some t.
+    typeOf Delta e2 = Some t2 ->
+    typeOf Delta e3 = Some t3 ->
+    typeOf Delta (subst n e2 (subst n3 e3 e1)) = Some t.
   Proof.
     intros.
     apply anyIn_cons in H. destruct H.
@@ -1949,10 +1949,10 @@ Section PreservationTTypes.
   Qed.
 
   Lemma step_preservation :
-    forall e e' Rho t,
+    forall e e' Delta t,
     step e = Some e' ->
-    typeOf Rho e = Some t ->
-    typeOf Rho e' = Some t.
+    typeOf Delta e = Some t ->
+    typeOf Delta e' = Some t.
   Proof.
     induction e; intros; inversion H; subst.
     - destruct (step e1) eqn:Heq1, (step e2) eqn:Heq2;
@@ -1989,7 +1989,7 @@ Section PreservationTTypes.
       reflexivity. assumption.
     + destruct_typeOf_chain H0.
       destruct (step e1_1) eqn:Heq6; inversion H3; subst.
-      * assert (typeOf Rho (CaseB e e1_2 e1_3) =
+      * assert (typeOf Delta (CaseB e e1_2 e1_3) =
                   Some (TArrow t3_1 t)).
         eapply IHe1. reflexivity.
         rewrite Heq1, Heq2, Heq3, eqType_refl. reflexivity.
@@ -2005,7 +2005,7 @@ Section PreservationTTypes.
                    eqType_refl. reflexivity.
     + destruct p. destruct_typeOf_chain H0.
       destruct (step e1_1) eqn:Heq6; inversion H3; subst.
-      * assert (typeOf Rho (CaseL e e1_2 (Pat n1 t1 n2 n ) e1_3) =
+      * assert (typeOf Delta (CaseL e e1_2 (Pat n1 t1 n2 n ) e1_3) =
                   Some (TArrow t3_1 t)).
         eapply IHe1. reflexivity.
         rewrite Heq1, Heq2, Heq3, eqTypeS_refl, eqTypeS_refl.
@@ -2080,12 +2080,12 @@ Section PreservationTTypes.
   Qed.
 
   Lemma well_typed_step :
-    forall Rho e e',
-    well_typed Rho e ->
+    forall Delta e e',
+    well_typed Delta e ->
     e ==> e' ->
-    well_typed Rho e'.
+    well_typed Delta e'.
   Proof.
-    intros Rho e e' Hwt Hstep.
+    intros Delta e e' Hwt Hstep.
     inversion Hstep. subst.
     destruct_typeOf_chain Hwt.
     erewrite step_preservation.
@@ -2093,12 +2093,12 @@ Section PreservationTTypes.
   Qed.
 
   Theorem well_typed_multi_step :
-    forall Rho e e',
-    well_typed Rho e ->
+    forall Delta e e',
+    well_typed Delta e ->
     e ==>* e' ->
-    well_typed Rho e'.
+    well_typed Delta e'.
   Proof.
-    intros Rho e e' Hwt Hstep.
+    intros Delta e e' Hwt Hstep.
     induction Hstep; auto.
     apply IHHstep. apply well_typed_step with (e := e1).
     apply Hwt. apply H.
@@ -2112,9 +2112,9 @@ Section Proofs.
                more_specific_refl : core.
 
   Lemma compatibility:
-    forall e Rho Gamma t d,
-    compatibleCtx Gamma Rho ->
-    typeOf Rho e = Some t ->
+    forall e Delta Gamma t d,
+    compatibleCtx Gamma Delta ->
+    typeOf Delta e = Some t ->
     Gamma |- e :? d ->
     compatible d t.
   Proof.
@@ -2180,24 +2180,17 @@ Section Proofs.
     can be assigned a determinism type. This establishes that
     determinism typing covers all valid programs. *)
   Theorem completeness :
-    forall e Rho Gamma t,
-    compatibleCtx Gamma Rho ->
-    typeOf Rho e = Some t ->
+    forall e Delta Gamma t,
+    compatibleCtx Gamma Delta ->
+    typeOf Delta e = Some t ->
     exists d, Gamma |- e :? d /\ compatible d t.
   Proof.
     intro e.
-    induction e; intros Rho Gamma t0 HG HW.
-    * destruct (Gamma n) eqn:Heq.
-        - exists Det. split. apply Rule_Var.
-          rewrite Heq. reflexivity.
-          eapply compatibility in HW. apply HW.
-          eassumption. eapply Rule_Var. assumption.
-        - exists Any. split. apply Rule_Var.
-          rewrite Heq. reflexivity. reflexivity.
-        - exists (Arrow d1 d2). split. apply Rule_Var.
-          rewrite Heq. reflexivity.
-          eapply compatibility in HW. apply HW.
-          eassumption. eapply Rule_Var. assumption.
+    induction e; intros Delta Gamma t0 HG HW.
+    * eapply (compatibility _ _ _ _ _ HG) in HW.
+      unfold compatibleCtx in HG.
+      exists (Gamma n). split. apply Rule_Var.
+      reflexivity. apply HW. apply Rule_Var. reflexivity.
     * exists Det. split. apply Rule_BTrue.
       simpl in HW. inversion HW. reflexivity.
     * exists Det. split. apply Rule_BFalse.
@@ -2205,14 +2198,14 @@ Section Proofs.
     * exists Det. split. apply Rule_Nil.
       simpl in HW. inversion HW. reflexivity.
     * destruct_typeOf_chain HW.
-      destruct (IHe1 Rho Gamma t2 HG Heq2), H,
-               (IHe2 Rho Gamma _ HG Heq1), H1.
+      destruct (IHe1 Delta Gamma t2 HG Heq2), H,
+               (IHe2 Delta Gamma _ HG Heq1), H1.
       eexists. split.
       eapply Rule_Cons; try eassumption; try reflexivity.
       destruct (more_specific x Det && more_specific x0 Det); reflexivity.
     * destruct_typeOf_chain HW.
-      destruct (IHe1 Rho Gamma (TArrow t1_1 t0) HG Heq1), H,
-               (IHe2 Rho Gamma t1_1 HG Heq2), H1, x.
+      destruct (IHe1 Delta Gamma (TArrow t1_1 t0) HG Heq1), H,
+               (IHe2 Delta Gamma t1_1 HG Heq2), H1, x.
       - exists (decide Det x0 Det). split. apply Rule_AppDet.
         apply H. apply H1. unfold decide.
         destruct (more_specific x0 Det) eqn:Heq4; reflexivity.
@@ -2224,7 +2217,7 @@ Section Proofs.
         unfold decide. destruct (more_specific x0 x1) eqn:Heq4.
         assumption. reflexivity.
     * destruct_typeOf_chain HW.
-      edestruct (IHe (update Nat.eqb Rho n t)
+      edestruct (IHe (update Nat.eqb Delta n t)
                      (update Nat.eqb Gamma n (mkCompatible t))).
       unfold compatibleCtx in *. intros n0.
       unfold update. destruct (n =? n0) eqn:Heq2.
@@ -2235,8 +2228,8 @@ Section Proofs.
       simpl. split.
       apply mkCompatible_compatible. apply H0.
     * destruct_typeOf_chain HW.
-      destruct (IHe1 Rho Gamma t0 HG Heq1), H,
-               (IHe2 Rho Gamma t0 HG Heq0), H1.
+      destruct (IHe1 Delta Gamma t0 HG Heq1), H,
+               (IHe2 Delta Gamma t0 HG Heq0), H1.
       exists Any. split. eapply Rule_Choice. apply H. apply H1.
       reflexivity.
     * destruct_typeOf_chain HW. destruct t.
@@ -2373,11 +2366,11 @@ Section Proofs.
    determinism type d2, and we substitute a well-typed expression e2 with
    compatible determinism type, then the result maintains a determinism type
    that is at least as specific as the original. *)
-  Lemma subst_lemma : forall e1 e2 Rho Gamma t2 d2 d1 d3 n,
+  Lemma subst_lemma : forall e1 e2 Delta Gamma t2 d2 d1 d3 n,
     anyIn (freeVars e2) (n::boundVars e1) = false ->
-    well_typed (update Nat.eqb Rho n t2) e1 ->
-    typeOf Rho e2 = Some t2 ->
-    compatibleCtx Gamma Rho ->
+    well_typed (update Nat.eqb Delta n t2) e1 ->
+    typeOf Delta e2 = Some t2 ->
+    compatibleCtx Gamma Delta ->
     compatible d2 t2 ->
     update Nat.eqb Gamma n d2 |- e1 :? d1 ->
     more_specific d3 d2 = true ->
@@ -2387,7 +2380,7 @@ Section Proofs.
       Gamma |- subst n e2 e1 :? d4.
   Proof.
     induction e1; intro;
-    intros Rho Gamma t2 d2 d1 d3 n0 H H0 H1 H3 H4; intros.
+    intros Delta Gamma t2 d2 d1 d3 n0 H H0 H1 H3 H4; intros.
     - inversion H2. subst. simpl.
       unfold update. destruct (n =? n0) eqn:Heq.
       + apply Nat.eqb_eq in Heq. subst.
@@ -2700,15 +2693,15 @@ Section Proofs.
    *)
 
   Lemma subst_lemma2 :
-    forall e1 e2 e3 Rho Gamma t2 t3 d1 d2 d3 n2 n3 d2' d3',
+    forall e1 e2 e3 Delta Gamma t2 t3 d1 d2 d3 n2 n3 d2' d3',
     anyIn (freeVars e2) (n3::n2::boundVars e1) = false ->
     anyIn (freeVars e3) (n3::n2::boundVars e1) = false ->
     anyIn (freeVars e2) (boundVars e3) = false ->
-    well_typed (update Nat.eqb (update Nat.eqb Rho n3 t3) n2 t2) e1 ->
-    typeOf Rho e2 = Some t2 ->
-    typeOf Rho e3 = Some t3 ->
+    well_typed (update Nat.eqb (update Nat.eqb Delta n3 t3) n2 t2) e1 ->
+    typeOf Delta e2 = Some t2 ->
+    typeOf Delta e3 = Some t3 ->
     n2 <> n3 ->
-    compatibleCtx Gamma Rho ->
+    compatibleCtx Gamma Delta ->
     compatible d2 t2 ->
     compatible d3 t3 ->
     update Nat.eqb (update Nat.eqb Gamma n3 d3) n2 d2 |- e1 :? d1 ->
@@ -2732,7 +2725,7 @@ Section Proofs.
       rewrite double_update_indep in Heq1; eauto.
       rewrite Heq1. reflexivity.
     + erewrite typeOf_unbound; eauto.
-    + eapply (update_compatible _ Rho); eauto.
+    + eapply (update_compatible _ Delta); eauto.
     + eassumption.
     + rewrite double_update_indep in H9; eauto.
     + eassumption.
@@ -2753,16 +2746,16 @@ Section Proofs.
    Shows that if an expression e reduces to e', then the determinism type
    of e' is at least as specific as the determinism type of e.
    This is the core type safety property for the determinism type system. *)
-  Theorem preservation : forall e e' Rho Gamma t d,
-    compatibleCtx Gamma Rho ->
+  Theorem preservation : forall e e' Delta Gamma t d,
+    compatibleCtx Gamma Delta ->
     e ==> e' ->
-    typeOf Rho e = Some t ->
+    typeOf Delta e = Some t ->
     compatible d t ->
     Gamma |- e :? d ->
     exists d', more_specific d' d = true /\ compatible d' t
       /\ Gamma |- e' :? d'.
   Proof.
-    induction e; intros e' Rho Gamma t0 d0 HX H HW HC H0;
+    induction e; intros e' Delta Gamma t0 d0 HX H HW HC H0;
     inversion H; inversion H1; subst.
     * inversion H0. subst.
       destruct_typeOf_chain HW.
@@ -3212,7 +3205,7 @@ Section Proofs.
             **  unfold lub. rewrite (unfold_more_specific Det Det).
                 rewrite andb_true_r.
                 destruct (more_specific d0 Det) eqn:Heq11.
-                --- destruct (subst_lemma2 _ _ _ Rho Gamma (TList t1)
+                --- destruct (subst_lemma2 _ _ _ Delta Gamma (TList t1)
                             t1 d_3 d2 d1 _ _ Det d0 H7 H4); eauto.
                     unfold well_typed. rewrite Heq3. reflexivity.
                     destruct d2; try inversion H17.
@@ -3265,9 +3258,9 @@ Section Proofs.
 
   Theorem preservation_multi : forall e e' t,
     e ==>* e' ->
-    forall Rho Gamma d,
-    compatibleCtx Gamma Rho ->
-    typeOf Rho e = Some t ->
+    forall Delta Gamma d,
+    compatibleCtx Gamma Delta ->
+    typeOf Delta e = Some t ->
     compatible d t ->
     Gamma |- e :? d ->
     exists d', more_specific d' d = true
@@ -3278,9 +3271,9 @@ Section Proofs.
     remember H as HC. clear HeqHC. inversion HC.
     remember H2 as H2C. clear HeqH2C.
     eapply (step_preservation _ _ _ _ H5) in H2.
-    apply (preservation e1 e2 Rho Gamma t d) in H; try assumption.
+    apply (preservation e1 e2 Delta Gamma t d) in H; try assumption.
     destruct H, H, H5, H8.
-    destruct (IHmulti_step_rel Rho Gamma x); eauto.
+    destruct (IHmulti_step_rel Delta Gamma x); eauto.
     destruct H9, H10. exists x0. split.
     eapply more_specific_transitive; eauto.
     split; assumption.
@@ -3290,19 +3283,21 @@ Section Proofs.
    The main theorem showing that if an expression e has deterministic type Det,
    then any expression e' that e reduces to will not be a non-deterministic choice.
    This validates that the determinism type system correctly tracks non-determinism. *)
-  Theorem soundness : forall Rho Gamma e e' t,
-    compatibleCtx Gamma Rho ->
-    typeOf Rho e = Some t ->
+  Theorem soundness : forall Delta Gamma e e' t,
+    compatibleCtx Gamma Delta ->
+    typeOf Delta e = Some t ->
     Gamma |- e :? Det ->
-    compatible Det t ->
     e ==>* e' ->
     notOr e'.
   Proof.
-    intros. destruct (preservation_multi e e' t H3
-                          Rho Gamma Det H H0 H2 H1).
-    destruct H4, H5.
-    destruct e'; try reflexivity; try inversion H6.
-    subst. inversion H4.
+    intros Delta Gamma e e' t H1 H2 H3 H4.
+    assert (compatible Det t) as H5 by
+      (destruct t; auto with *; reflexivity).
+    destruct (preservation_multi e e' t H4
+                Delta Gamma Det H1 H2 H5 H3)
+      as [d' [H6 [_ H7]]].
+    destruct e'; try reflexivity.
+    inversion H7. subst. inversion H6.
   Qed.
 
 End Proofs.
