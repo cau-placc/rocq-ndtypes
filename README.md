@@ -1,4 +1,4 @@
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20032589.svg)](https://doi.org/10.5281/zenodo.20032589)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20032590.svg)](https://doi.org/10.5281/zenodo.20032590)
 # Rocq Formalization for "Determinism Types for Functional Logic Programming"
 
 **Looking for the version linked in my thesis? Go to the [adaptation_ts branch](https://github.com/cau-placc/rocq-ndtypes/tree/adaptation_ts).**
