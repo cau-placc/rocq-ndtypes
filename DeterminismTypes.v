@@ -920,10 +920,10 @@ Section Examples.
   Example exVar : Gamma1 |- Var 1 :? Det.
   Proof. eauto. Qed.
 
-  Example eFreeVar : Gamma1 |- Var 42 :? Any.
+  Example exFreeVar : Gamma1 |- Var 42 :? Any.
   Proof. eauto. Qed.
 
-  Example exCons : Gamma1 |- Nil TBool :? Det.
+  Example exNil : Gamma1 |- Nil TBool :? Det.
   Proof. eauto. Qed.
 
   Example exApp : Gamma1 |- App (Abs 2 TBool (Var 2)) (Var 1) :? Det.
@@ -967,7 +967,7 @@ Section Examples.
   Definition RhoAV' := update Nat.eqb (fun _ => TBool) 1 (TArrow TBool TBool).
   Definition RhoAV  := update Nat.eqb RhoAV' 2 (TArrow TBool TBool).
   Definition GammaAV := update Nat.eqb (update Nat.eqb (fun _ => Any) 1 Any) 2 (mkCompatible (RhoAV 2)).
-  (* GammaAV = {1 -> Det, 2 -> Arrow TBool TBool} *)
+  (* GammaAV = {1 -> Any, 2 -> Arrow Det Det} *)
 
   (* The following example requires the AppAny rule to type it correctly. *)
   Example exAllValues : GammaAV |- App (Var 1) (Var 2) :? Any.
@@ -996,25 +996,6 @@ Section Examples.
   Definition GammaC := mkCompatibleCtx RhoC.
   Example exChoice2 : GammaC |- App (Or (Var 1) (Var 2)) BFalse :? Any.
   Proof. eapply Rule_AppAny; eauto. Qed.
-
-  Lemma exChoice2_must_use_AppAny :
-  forall b d,
-    GammaC |- App (Or (Var 1) (Var 2)) b :? d ->
-    d = Any /\
-    (forall d1 d2,
-      ~ (GammaC |- Or (Var 1) (Var 2) :? d1 /\ GammaC |- b :? d2 /\
-         exists d3 d4 d5,
-           GammaC |- Or (Var 1) (Var 2) :? Arrow d3 d4 /\
-           GammaC |- b :? d5 /\
-           d = decide d3 d5 d4)).
-  Proof.
-    intros b d H.
-    inversion H; subst.
-    - split; auto.
-      intros d3 d4 [H1 [H2 [d5 [d6 [d7 [H4 [H6 H7]]]]]]].
-      inversion H4.
-    - inversion H2.
-  Qed.
 
   (* (Det -> Det -> Det) <=
      (Det -> Any -> Det). *)
@@ -2577,7 +2558,7 @@ Section Proofs.
     compatible d t ->
     Gamma |- e :? d ->
     exists d', more_specific d' d = true
-      /\ compatible d t
+      /\ compatible d' t
       /\ Gamma |- e' :? d'.
   Proof.
     intros e e' t H. induction H; intros; eauto.
