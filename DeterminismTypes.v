@@ -28,7 +28,8 @@ definitions:
 - "step" (or "==>") is the small-step semantics
 - "subst" is the substitution function
 - "notOr" is the definition for a deterministic result
-- Important Theorems are: "completeness", "preservation" and "soundness"
+- Important Theorems are: "completeness", "preservation",
+  "soundness" and "functional_is_deterministic"
 
 Also, I am a rocq novice, so this is probably not the most elegant
 formalization. If you have suggestions for improvements, please let me know.
@@ -107,6 +108,23 @@ Section Types.
     match e with
     | Or _ _ => False
     | _ => True
+    end.
+
+  Fixpoint functional (e : Exp) : Prop :=
+    match e with
+    | Or _ _ => False
+    | Free _ _ _ => False
+    | Cons e1 e2 => functional e1 /\ functional e2
+    | App e1 e2 => functional e1 /\ functional e2
+    | Abs _ _ e1 => functional e1
+    | CaseB e1 e2 e3 => functional e1 /\ functional e2 /\ functional e3
+    | CaseL e1 e2 (Pat _ _ _ _) e3 =>
+        functional e1 /\ functional e2 /\
+        functional e3
+    | Var _ => True
+    | BTrue => True
+    | BFalse => True
+    | Nil _ => True
     end.
 
   Fixpoint eqType (t1 t2 : TType) : bool :=
@@ -210,6 +228,13 @@ Section Types.
     | Any : DType
     | Arrow : DType -> DType -> DType.
 
+  Fixpoint noAny (d : DType) : Prop :=
+    match d with
+    | Det => True
+    | Any => False
+    | Arrow d1 d2 => noAny d1 /\ noAny d2
+    end.
+
   Fixpoint compatible (d : DType) (t : TType) : Prop :=
     match d, t with
     | Det, _ => True
@@ -238,6 +263,12 @@ Section Types.
   Lemma compatible_Any : forall t,
     compatible Any t.
   Proof. reflexivity. Qed.
+
+  Lemma compatible_bool_list : forall d t,
+    compatible d (TList t) -> compatible d TBool.
+  Proof.
+    intros. destruct d; simpl in *; auto.
+  Qed.
 
 End Types.
 
@@ -362,13 +393,6 @@ End Context.
    - less_specific: the opposite of more_specific
    - decide: determines the result type of function application based on specificity *)
 Section Subtyping.
-
-  Fixpoint det_arrow (d : DType) : bool :=
-    match d with
-    | Det => true
-    | Arrow d1 d2 => andb (det_arrow d1) (det_arrow d2)
-    | _ => false
-    end.
 
   Fixpoint sizeD (d : DType) : nat :=
     match d with
@@ -552,6 +576,45 @@ Section Subtyping.
   Lemma more_specific_Any : forall d, more_specific d Any = true.
   Proof.
     - induction d; simpl; trivial.
+  Qed.
+
+  Lemma noAny_more_specific_det : forall d1,
+    noAny d1 ->
+      more_specific d1 Det = true /\
+        more_specific Det d1 = true.
+  Proof.
+    induction d1; simpl; intros; try reflexivity; try inversion H.
+    - split; reflexivity.
+    - split; rewrite unfold_more_specific.
+      + destruct (IHd1_1 H0). destruct (IHd1_2 H1).
+        rewrite H3, H4. reflexivity.
+      + destruct (IHd1_1 H0). destruct (IHd1_2 H1).
+        rewrite H2, H5. reflexivity.
+  Qed.
+
+  Lemma noAny_more_specific : forall d1 d2,
+    noAny d1 -> noAny d2 ->
+      more_specific d2 d1 = true /\
+      more_specific d1 d2 = true.
+  Proof.
+    induction d1; intros.
+    - apply noAny_more_specific_det. assumption.
+    - inversion H.
+    - rewrite unfold_more_specific. destruct H.
+      destruct d2.
+      + apply noAny_more_specific_det in H.
+        destruct H. rewrite H.
+        apply noAny_more_specific_det in H1.
+        destruct H1. rewrite H3. split. reflexivity.
+        rewrite unfold_more_specific. rewrite H2, H1. reflexivity.
+      + inversion H0.
+      + split.
+        * destruct H0.
+          destruct (IHd1_1 d2_1 H H0). destruct (IHd1_2 d2_2 H1 H2).
+          rewrite H4, H5. reflexivity.
+        * rewrite unfold_more_specific. destruct H0.
+          destruct (IHd1_1 d2_1 H H0). destruct (IHd1_2 d2_2 H1 H2).
+          rewrite H3, H6. reflexivity.
   Qed.
 
 End Subtyping.
@@ -1124,6 +1187,105 @@ Section LeastUpperBound.
     - eapply more_specific_lub_small; eassumption.
     - inversion H1.
     - inversion C1.
+  Qed.
+
+  Lemma noAny_lub2_glb2_det_left: forall d,
+    noAny d ->
+    noAny (lub2 Det d) /\
+    noAny (glb2 Det d).
+  Proof.
+    induction d; intros.
+    - split; reflexivity.
+    - inversion H.
+    - destruct H.
+      apply IHd1 in H. destruct H.
+      apply IHd2 in H0. destruct H0.
+      split.
+      + rewrite unfold_lub2. simpl.
+        split; assumption.
+      + rewrite unfold_glb2. simpl.
+        split; assumption.
+  Qed.
+
+  Lemma noAny_lub2_glb2_det_right: forall d,
+    noAny d ->
+    noAny (lub2 d Det) /\
+    noAny (glb2 d Det).
+  Proof.
+    induction d; intros.
+    - split; reflexivity.
+    - inversion H.
+    - destruct H.
+      apply IHd1 in H. destruct H.
+      apply IHd2 in H0. destruct H0.
+      split.
+      + rewrite unfold_lub2. simpl.
+        split; assumption.
+      + rewrite unfold_glb2. simpl.
+        split; assumption.
+  Qed.
+
+  Lemma noAny_lub2: forall d1 d2,
+    noAny d1 ->
+    noAny d2 ->
+      noAny (lub2 d1 d2) /\
+      noAny (glb2 d1 d2).
+  Proof.
+    induction d1; intros.
+    - split.
+      * rewrite unfold_lub2.
+        destruct d2.
+        + reflexivity.
+        + inversion H0.
+        + destruct H0.
+          apply noAny_lub2_glb2_det_left in H0. destruct H0.
+          apply noAny_lub2_glb2_det_left in H1. destruct H1.
+          simpl. split; assumption.
+      * rewrite unfold_glb2.
+        destruct d2.
+        + reflexivity.
+        + inversion H0.
+        + destruct H0.
+          apply noAny_lub2_glb2_det_left in H0. destruct H0.
+          apply noAny_lub2_glb2_det_left in H1. destruct H1.
+          simpl. split; assumption.
+    - inversion H.
+    - split.
+      * rewrite unfold_lub2.
+        destruct d2.
+        + destruct H.
+          apply noAny_lub2_glb2_det_right in H. destruct H.
+          apply noAny_lub2_glb2_det_right in H1. destruct H1.
+          simpl. split; assumption.
+        + inversion H0.
+        + destruct H, H0. simpl. split.
+          ** apply IHd1_1; assumption.
+          ** apply IHd1_2; assumption.
+      * rewrite unfold_glb2.
+        destruct d2.
+        + destruct H.
+          apply noAny_lub2_glb2_det_right in H. destruct H.
+          apply noAny_lub2_glb2_det_right in H1. destruct H1.
+          simpl. split; assumption.
+        + inversion H0.
+        + destruct H, H0. simpl. split.
+          ** apply IHd1_1; assumption.
+          ** apply IHd1_2; assumption.
+  Qed.
+
+  Lemma noAny_lub: forall d1 d2 d3,
+    compatible d1 TBool ->
+    noAny d1 ->
+    noAny d2 ->
+    noAny d3 ->
+    noAny (lub d1 d2 d3).
+  Proof.
+    intros.
+    unfold lub.
+    destruct d1.
+    - apply noAny_lub2; assumption.
+    - inversion H0.
+    - inversion H.
   Qed.
 
 End LeastUpperBound.
@@ -3298,6 +3460,83 @@ Section Proofs.
       as [d' [H6 [_ H7]]].
     destruct e'; try reflexivity.
     inversion H7. subst. inversion H6.
+  Qed.
+
+Theorem functional_is_deterministic : forall e t Delta Gamma,
+    compatibleCtx Gamma Delta ->
+    (forall x, noAny (Gamma x)) ->
+    typeOf Delta e = Some t ->
+    functional e ->
+    exists d, Gamma |- e :? d
+      /\ noAny d.
+  Proof.
+    induction e; intros; try inversion H2.
+    - exists (Gamma n). split. apply Rule_Var. reflexivity.
+      apply H0.
+    - exists Det. split. apply Rule_BTrue. reflexivity.
+    - exists Det. split. apply Rule_BFalse. reflexivity.
+    - exists Det. split. apply Rule_Nil. reflexivity.
+    - destruct_typeOf_chain H1.
+      destruct (IHe1 _ _ _ H H0 Heq2 H3). destruct H5.
+      destruct (IHe2 _ _ _ H H0 Heq1 H4). destruct H7.
+      eexists. split. apply Rule_Cons; eassumption.
+      apply noAny_more_specific_det in H6. destruct H6.
+      apply noAny_more_specific_det in H8. destruct H8.
+      rewrite H6, H8. reflexivity.
+    - destruct_typeOf_chain H1.
+      destruct (IHe1 _ _ _ H H0 Heq1 H3). destruct H5.
+      destruct (IHe2 _ _ _ H H0 Heq2 H4). destruct H7.
+      destruct x.
+      + eexists. split. apply Rule_AppDet; eassumption.
+        unfold decide.
+        apply noAny_more_specific_det in H8. destruct H8.
+        rewrite H8. reflexivity.
+      + inversion H6.
+      + exists (decide x1 x0 x2). split. eapply Rule_AppFun.
+        eassumption. eassumption. reflexivity.
+        unfold decide. destruct H6.
+        apply (noAny_more_specific _ _ H8) in H6. destruct H6.
+        rewrite H10. assumption.
+    - destruct_typeOf_chain H1.
+      edestruct (IHe t1 (update Nat.eqb Delta n t)).
+      eapply (update_compatible _ _ _ _ Det). eassumption.
+      reflexivity.
+      + intros. unfold update. destruct (Nat.eqb n x) eqn:Heq; auto.
+        reflexivity.
+      + assumption.
+      + assumption.
+      + destruct H3. exists (Arrow Det x). split. apply Rule_Abs.
+        reflexivity. assumption. simpl. eauto.
+    - destruct_typeOf_chain H1. destruct H4.
+      destruct (IHe1 _ _ _ H H0 Heq1 H3). destruct H6.
+      destruct (IHe2 _ _ _ H H0 Heq2 H4). destruct H8.
+      destruct (IHe3 _ _ _ H H0 Heq3 H5). destruct H10.
+      eexists. split. apply Rule_CaseBool. eassumption.
+      eassumption. eassumption.
+      apply noAny_lub. eapply compatibility. eassumption. eassumption. assumption. assumption. assumption. assumption.
+    - destruct_typeOf_chain H1. destruct H2, H3.
+      destruct (IHe1 _ _ _ H H0 Heq1 H2). destruct H5.
+      destruct (IHe2 _ _ _ H H0 Heq3 H3). destruct H7.
+      edestruct (IHe3 t
+        (update Nat.eqb (update Nat.eqb Delta n2 (TList t1)) n1 t1)
+        (update Nat.eqb (update Nat.eqb
+                        Gamma n2 Det) n1 Det)).
+      eapply (update_compatible _ _ _ _ Det).
+      eapply (update_compatible _ _ _ _ Det). assumption.
+      reflexivity. reflexivity.
+      + intros. unfold update.
+        destruct (Nat.eqb n1 x1) eqn:Heq6, (Nat.eqb n2 x1) eqn:Heq7.
+        reflexivity. reflexivity. reflexivity. apply H0.
+      + assumption.
+      + assumption.
+      + destruct H9. eexists. split.
+        eapply Rule_CaseList with (d1 := Det) (d2 := Det).
+        eassumption. reflexivity. reflexivity. eassumption.
+        rewrite double_update_indep. eassumption. assumption.
+        apply noAny_more_specific_det. assumption.
+        apply noAny_lub; try assumption.
+        eapply compatible_bool_list.
+        eapply compatibility. eassumption. eassumption. assumption.
   Qed.
 
 End Proofs.
