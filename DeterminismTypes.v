@@ -3264,7 +3264,7 @@ Section Proofs.
     compatible d t ->
     Gamma |- e :? d ->
     exists d', more_specific d' d = true
-      /\ compatible d t
+      /\ compatible d' t
       /\ Gamma |- e' :? d'.
   Proof.
     intros e e' t H. induction H; intros; eauto.
