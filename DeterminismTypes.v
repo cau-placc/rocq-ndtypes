@@ -1598,7 +1598,7 @@ Section Examples.
   Example exVar : Gamma1 |- Var 1 :? Det.
   Proof. eauto. Qed.
 
-  Example eFreeVar : Gamma1 |- Var 42 :? Any.
+  Example exFreeVar : Gamma1 |- Var 42 :? Any.
   Proof. eauto. Qed.
 
   Example exCons : Gamma1 |- Nil TBool :? Det.
@@ -1645,7 +1645,7 @@ Section Examples.
   Definition RhoAV' := update Nat.eqb (fun _ => TBool) 1 (TArrow TBool TBool).
   Definition RhoAV  := update Nat.eqb RhoAV' 2 (TArrow TBool TBool).
   Definition GammaAV := update Nat.eqb (update Nat.eqb (fun _ => Any) 1 Any) 2 (mkCompatible (RhoAV 2)).
-  (* GammaAV = {1 -> Det, 2 -> Arrow TBool TBool} *)
+  (* GammaAV = {1 -> Any, 2 -> Arrow Det Det} *)
 
   (* The following example requires the AppAny rule to type it correctly. *)
   Example exAllValues : GammaAV |- App (Var 1) (Var 2) :? Any.
