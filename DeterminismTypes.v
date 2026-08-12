@@ -228,11 +228,11 @@ Section Types.
     | Any : DType
     | Arrow : DType -> DType -> DType.
 
-  Fixpoint noAny (d : DType) : Prop :=
+  Fixpoint nonAny (d : DType) : Prop :=
     match d with
     | Det => True
     | Any => False
-    | Arrow d1 d2 => noAny d1 /\ noAny d2
+    | Arrow d1 d2 => nonAny d1 /\ nonAny d2
     end.
 
   Fixpoint compatible (d : DType) (t : TType) : Prop :=
@@ -578,8 +578,8 @@ Section Subtyping.
     - induction d; simpl; trivial.
   Qed.
 
-  Lemma noAny_more_specific_det : forall d1,
-    noAny d1 ->
+  Lemma nonAny_more_specific_det : forall d1,
+    nonAny d1 ->
       more_specific d1 Det = true /\
         more_specific Det d1 = true.
   Proof.
@@ -592,19 +592,19 @@ Section Subtyping.
         rewrite H2, H5. reflexivity.
   Qed.
 
-  Lemma noAny_more_specific : forall d1 d2,
-    noAny d1 -> noAny d2 ->
+  Lemma nonAny_more_specific : forall d1 d2,
+    nonAny d1 -> nonAny d2 ->
       more_specific d2 d1 = true /\
       more_specific d1 d2 = true.
   Proof.
     induction d1; intros.
-    - apply noAny_more_specific_det. assumption.
+    - apply nonAny_more_specific_det. assumption.
     - inversion H.
     - rewrite unfold_more_specific. destruct H.
       destruct d2.
-      + apply noAny_more_specific_det in H.
+      + apply nonAny_more_specific_det in H.
         destruct H. rewrite H.
-        apply noAny_more_specific_det in H1.
+        apply nonAny_more_specific_det in H1.
         destruct H1. rewrite H3. split. reflexivity.
         rewrite unfold_more_specific. rewrite H2, H1. reflexivity.
       + inversion H0.
@@ -1189,10 +1189,10 @@ Section LeastUpperBound.
     - inversion C1.
   Qed.
 
-  Lemma noAny_lub2_glb2_det_left: forall d,
-    noAny d ->
-    noAny (lub2 Det d) /\
-    noAny (glb2 Det d).
+  Lemma nonAny_lub2_glb2_det_left: forall d,
+    nonAny d ->
+    nonAny (lub2 Det d) /\
+    nonAny (glb2 Det d).
   Proof.
     induction d; intros.
     - split; reflexivity.
@@ -1207,10 +1207,10 @@ Section LeastUpperBound.
         split; assumption.
   Qed.
 
-  Lemma noAny_lub2_glb2_det_right: forall d,
-    noAny d ->
-    noAny (lub2 d Det) /\
-    noAny (glb2 d Det).
+  Lemma nonAny_lub2_glb2_det_right: forall d,
+    nonAny d ->
+    nonAny (lub2 d Det) /\
+    nonAny (glb2 d Det).
   Proof.
     induction d; intros.
     - split; reflexivity.
@@ -1225,11 +1225,11 @@ Section LeastUpperBound.
         split; assumption.
   Qed.
 
-  Lemma noAny_lub2: forall d1 d2,
-    noAny d1 ->
-    noAny d2 ->
-      noAny (lub2 d1 d2) /\
-      noAny (glb2 d1 d2).
+  Lemma nonAny_lub2: forall d1 d2,
+    nonAny d1 ->
+    nonAny d2 ->
+      nonAny (lub2 d1 d2) /\
+      nonAny (glb2 d1 d2).
   Proof.
     induction d1; intros.
     - split.
@@ -1238,24 +1238,24 @@ Section LeastUpperBound.
         + reflexivity.
         + inversion H0.
         + destruct H0.
-          apply noAny_lub2_glb2_det_left in H0. destruct H0.
-          apply noAny_lub2_glb2_det_left in H1. destruct H1.
+          apply nonAny_lub2_glb2_det_left in H0. destruct H0.
+          apply nonAny_lub2_glb2_det_left in H1. destruct H1.
           simpl. split; assumption.
       * rewrite unfold_glb2.
         destruct d2.
         + reflexivity.
         + inversion H0.
         + destruct H0.
-          apply noAny_lub2_glb2_det_left in H0. destruct H0.
-          apply noAny_lub2_glb2_det_left in H1. destruct H1.
+          apply nonAny_lub2_glb2_det_left in H0. destruct H0.
+          apply nonAny_lub2_glb2_det_left in H1. destruct H1.
           simpl. split; assumption.
     - inversion H.
     - split.
       * rewrite unfold_lub2.
         destruct d2.
         + destruct H.
-          apply noAny_lub2_glb2_det_right in H. destruct H.
-          apply noAny_lub2_glb2_det_right in H1. destruct H1.
+          apply nonAny_lub2_glb2_det_right in H. destruct H.
+          apply nonAny_lub2_glb2_det_right in H1. destruct H1.
           simpl. split; assumption.
         + inversion H0.
         + destruct H, H0. simpl. split.
@@ -1264,8 +1264,8 @@ Section LeastUpperBound.
       * rewrite unfold_glb2.
         destruct d2.
         + destruct H.
-          apply noAny_lub2_glb2_det_right in H. destruct H.
-          apply noAny_lub2_glb2_det_right in H1. destruct H1.
+          apply nonAny_lub2_glb2_det_right in H. destruct H.
+          apply nonAny_lub2_glb2_det_right in H1. destruct H1.
           simpl. split; assumption.
         + inversion H0.
         + destruct H, H0. simpl. split.
@@ -1273,17 +1273,17 @@ Section LeastUpperBound.
           ** apply IHd1_2; assumption.
   Qed.
 
-  Lemma noAny_lub: forall d1 d2 d3,
+  Lemma nonAny_lub: forall d1 d2 d3,
     compatible d1 TBool ->
-    noAny d1 ->
-    noAny d2 ->
-    noAny d3 ->
-    noAny (lub d1 d2 d3).
+    nonAny d1 ->
+    nonAny d2 ->
+    nonAny d3 ->
+    nonAny (lub d1 d2 d3).
   Proof.
     intros.
     unfold lub.
     destruct d1.
-    - apply noAny_lub2; assumption.
+    - apply nonAny_lub2; assumption.
     - inversion H0.
     - inversion H.
   Qed.
@@ -3464,11 +3464,11 @@ Section Proofs.
 
 Theorem functional_is_deterministic : forall e t Delta Gamma,
     compatibleCtx Gamma Delta ->
-    (forall x, noAny (Gamma x)) ->
+    (forall x, nonAny (Gamma x)) ->
     typeOf Delta e = Some t ->
     functional e ->
     exists d, Gamma |- e :? d
-      /\ noAny d.
+      /\ nonAny d.
   Proof.
     induction e; intros; try inversion H2.
     - exists (Gamma n). split. apply Rule_Var. reflexivity.
@@ -3480,8 +3480,8 @@ Theorem functional_is_deterministic : forall e t Delta Gamma,
       destruct (IHe1 _ _ _ H H0 Heq2 H3). destruct H5.
       destruct (IHe2 _ _ _ H H0 Heq1 H4). destruct H7.
       eexists. split. apply Rule_Cons; eassumption.
-      apply noAny_more_specific_det in H6. destruct H6.
-      apply noAny_more_specific_det in H8. destruct H8.
+      apply nonAny_more_specific_det in H6. destruct H6.
+      apply nonAny_more_specific_det in H8. destruct H8.
       rewrite H6, H8. reflexivity.
     - destruct_typeOf_chain H1.
       destruct (IHe1 _ _ _ H H0 Heq1 H3). destruct H5.
@@ -3489,13 +3489,13 @@ Theorem functional_is_deterministic : forall e t Delta Gamma,
       destruct x.
       + eexists. split. apply Rule_AppDet; eassumption.
         unfold decide.
-        apply noAny_more_specific_det in H8. destruct H8.
+        apply nonAny_more_specific_det in H8. destruct H8.
         rewrite H8. reflexivity.
       + inversion H6.
       + exists (decide x1 x0 x2). split. eapply Rule_AppFun.
         eassumption. eassumption. reflexivity.
         unfold decide. destruct H6.
-        apply (noAny_more_specific _ _ H8) in H6. destruct H6.
+        apply (nonAny_more_specific _ _ H8) in H6. destruct H6.
         rewrite H10. assumption.
     - destruct_typeOf_chain H1.
       edestruct (IHe t1 (update Nat.eqb Delta n t)).
@@ -3513,7 +3513,7 @@ Theorem functional_is_deterministic : forall e t Delta Gamma,
       destruct (IHe3 _ _ _ H H0 Heq3 H5). destruct H10.
       eexists. split. apply Rule_CaseBool. eassumption.
       eassumption. eassumption.
-      apply noAny_lub. eapply compatibility. eassumption. eassumption. assumption. assumption. assumption. assumption.
+      apply nonAny_lub. eapply compatibility. eassumption. eassumption. assumption. assumption. assumption. assumption.
     - destruct_typeOf_chain H1. destruct H2, H3.
       destruct (IHe1 _ _ _ H H0 Heq1 H2). destruct H5.
       destruct (IHe2 _ _ _ H H0 Heq3 H3). destruct H7.
@@ -3533,8 +3533,8 @@ Theorem functional_is_deterministic : forall e t Delta Gamma,
         eapply Rule_CaseList with (d1 := Det) (d2 := Det).
         eassumption. reflexivity. reflexivity. eassumption.
         rewrite double_update_indep. eassumption. assumption.
-        apply noAny_more_specific_det. assumption.
-        apply noAny_lub; try assumption.
+        apply nonAny_more_specific_det. assumption.
+        apply nonAny_lub; try assumption.
         eapply compatible_bool_list.
         eapply compatibility. eassumption. eassumption. assumption.
   Qed.
