@@ -1,7 +1,7 @@
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20032590.svg)](https://doi.org/10.5281/zenodo.20032590)
-# Rocq Formalization for "Determinism Types for Functional Logic Programming"
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22135098.svg)](https://doi.org/10.5281/zenodo.22135098)
+# Rocq Formalization for my Thesis
 
-**Looking for the version linked in my thesis? Go to the [adaptation_ts branch](https://github.com/cau-placc/rocq-ndtypes/tree/adaptation_ts).**
+**Looking for the version linked in the original paper? Go to the [paper tag](https://github.com/cau-placc/rocq-ndtypes/tree/paper).**
 You can check that this formalization corresponds to the paper.
 Just search in this document for the following important theorems and
 definitions:
@@ -16,7 +16,8 @@ definitions:
 - "step" (or "==>") is the small-step semantics
 - "subst" is the substitution function
 - "notOr" is the definition for a deterministic result
-- Important Theorems are: "completeness", "preservation" and "soundness"
+- Important Theorems are: "completeness", "preservation",
+  "soundness" and "functional_is_deterministic"
 
 Also, I am a rocq novice, so this is probably not the most elegant
 formalization. If you have suggestions for improvements, please let me know.
